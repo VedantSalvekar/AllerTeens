@@ -7,7 +7,21 @@
 .buildlog/
 .history
 
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
 
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Flutter repo-specific
 /bin/cache/

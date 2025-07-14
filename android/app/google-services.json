@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "539686644208",
+    "project_id": "allerwise-9635e",
+    "storage_bucket": "allerwise-9635e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:539686644208:android:eb6220d9a9e792f5acd535",
+        "android_client_info": {
+          "package_name": "com.allerwise.app.allerwise"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "539686644208-vr9fot8ev7bjtb6rvbmbvguqns77oja8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.allerwise.app.allerwise",
+            "certificate_hash": "3bfa67d2fe5112c11fde04a6150894589cb5495c"
+          }
+        },
+        {
+          "client_id": "539686644208-4ossg0jb6ilbma02ro7khn0tprph23ve.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_lF6x8gZXGzJWVxEaT5BMdLjVycEhvLE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "539686644208-4ossg0jb6ilbma02ro7khn0tprph23ve.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "539686644208-qj4n2dj1jbv0ecgu78psm7ik7ssdml5c.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.allerwise.app.allerwise"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
