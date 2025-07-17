@@ -45,6 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs access to microphone for speech recognition to enable voice conversations with the AI waiter.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app needs access to speech recognition to understand your voice commands during restaurant conversations.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

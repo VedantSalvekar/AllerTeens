@@ -39,22 +39,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final authState = ref.watch(authControllerProvider);
     final authController = ref.read(authControllerProvider.notifier);
 
-    // Listen to auth state changes
+    // Listen to auth state changes for error handling only
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
-      // Clear any existing errors first
       if (next.error != null) {
         _showErrorSnackBar(context, next.error!);
-        return;
-      }
-
-      // Check if user just signed up successfully
-      if (next.user != null && next.isInitialized) {
-        // Add a small delay to ensure state is properly set
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _navigateBasedOnUserState(next.user!);
-          }
-        });
       }
     });
 
@@ -339,30 +327,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
 
     authController.signInWithGoogle();
-  }
-
-  void _navigateBasedOnUserState(UserModel user) {
-    if (!user.isEmailVerified) {
-      // Email not verified, go to email verification screen
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (context) => const EmailVerificationScreen(),
-        ),
-        (route) => false,
-      );
-    } else if (user.allergies.isNotEmpty) {
-      // User already has allergy data, go directly to home
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const HomeView()),
-        (route) => false,
-      );
-    } else {
-      // User needs to set allergies first
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const AllergySelectionScreen()),
-        (route) => false,
-      );
-    }
   }
 
   void _showErrorSnackBar(BuildContext context, String message) {

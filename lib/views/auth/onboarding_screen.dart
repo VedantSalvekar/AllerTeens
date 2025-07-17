@@ -24,22 +24,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
 
-    // Listen to auth state changes
+    // Listen to auth state changes for error handling only
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
-      // Clear any existing errors first
       if (next.error != null) {
         _showErrorSnackBar(context, next.error!);
-        return;
-      }
-
-      // Check if user just authenticated successfully
-      if (next.user != null && next.isInitialized) {
-        // Add a small delay to ensure state is properly set
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _navigateBasedOnUserState(next.user!);
-          }
-        });
       }
     });
 
@@ -125,7 +113,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     child: ElevatedButton(
                       onPressed: authState.isLoading
                           ? null
-                          : () => _navigateToSignup(context),
+                          : () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const SignupScreen(),
+                              ),
+                            ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: AppColors.white,
@@ -215,7 +207,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     child: OutlinedButton(
                       onPressed: authState.isLoading
                           ? null
-                          : () => _navigateToLogin(context),
+                          : () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const LoginScreen(),
+                              ),
+                            ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.textPrimary,
                         side: BorderSide(color: AppColors.textPrimary),
@@ -247,54 +243,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         ),
       ),
     );
-  }
-
-  /// Navigate based on user state
-  void _navigateBasedOnUserState(UserModel user) {
-    if (!user.isEmailVerified) {
-      // Email not verified, go to email verification screen
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (context) => const EmailVerificationScreen(),
-        ),
-        (route) => false,
-      );
-    } else if (user.allergies.isNotEmpty) {
-      // User already has allergy data, go directly to home
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const HomeView()),
-        (route) => false,
-      );
-    } else {
-      // User needs to set allergies first
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const AllergySelectionScreen()),
-        (route) => false,
-      );
-    }
-  }
-
-  /// Handle authentication state changes for navigation
-  void _handleAuthStateChange(
-    BuildContext context,
-    AuthState? previous,
-    AuthState next,
-  ) {
-    // This method is now replaced by the improved listener above
-  }
-
-  /// Navigate to signup screen
-  void _navigateToSignup(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (context) => const SignupScreen()));
-  }
-
-  /// Navigate to login screen
-  void _navigateToLogin(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (context) => const LoginScreen()));
   }
 
   /// Handle Google Sign In

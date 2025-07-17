@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'controllers/auth_controller.dart';
+import 'models/user_model.dart';
 import 'views/auth/login_screen.dart';
+import 'views/auth/onboarding_screen.dart';
+import 'views/auth/email_verification_screen.dart';
+import 'views/auth/allergy_selection_screen.dart';
 import 'views/home/home_view.dart';
 import 'views/splash/splash_screen.dart';
+import 'views/integrated_conversation/integrated_conversation_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants.dart';
 
@@ -28,13 +33,13 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: AppConstants.appName,
       theme: AppTheme.lightTheme,
-      home: const SplashScreen(),
+      home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
-/// Wrapper widget that handles authentication state
+/// Wrapper widget that handles authentication state and navigation
 class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
@@ -47,8 +52,23 @@ class AuthWrapper extends ConsumerWidget {
       return const LoadingScreen();
     }
 
-    // Show appropriate screen based on auth state
-    return authState.isAuthenticated ? const HomeView() : const LoginScreen();
+    // Handle navigation based on auth state
+    if (!authState.isAuthenticated) {
+      return const OnboardingScreen();
+    }
+
+    final user = authState.user!;
+
+    // User is authenticated, determine which screen to show
+    if (!user.isEmailVerified) {
+      return const EmailVerificationScreen();
+    }
+
+    if (user.allergies.isEmpty) {
+      return const AllergySelectionScreen();
+    }
+
+    return const HomeView();
   }
 }
 
@@ -60,56 +80,8 @@ class LoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // App Logo
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(
-                  AppConstants.largeBorderRadius,
-                ),
-              ),
-              child: const Icon(
-                Icons.medical_services,
-                size: 60,
-                color: AppColors.white,
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // App Name
-            Text(
-              AppConstants.appName,
-              style: AppTextStyles.headline1.copyWith(color: AppColors.primary),
-            ),
-            const SizedBox(height: 8),
-
-            // App Description
-            Text(
-              AppConstants.appDescription,
-              style: AppTextStyles.bodyText1.copyWith(color: AppColors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 48),
-
-            // Loading Indicator
-            const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-            ),
-            const SizedBox(height: 24),
-
-            // Loading Text
-            Text(
-              'Initializing AllerWise...',
-              style: AppTextStyles.bodyText1.copyWith(color: AppColors.grey),
-            ),
-          ],
-        ),
+      body: const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
       ),
     );
   }
