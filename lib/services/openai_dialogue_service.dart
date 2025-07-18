@@ -200,8 +200,6 @@ class OpenAIDialogueService {
           }
         },
         onStatus: (status) {
-          debugPrint('🎤 [SPEECH] Speech status: $status');
-
           // Handle status changes that might indicate problems
           if (status == 'notListening' && _isListening) {
             debugPrint(
@@ -213,7 +211,7 @@ class OpenAIDialogueService {
         },
         debugLogging: kDebugMode,
       );
-      debugPrint('🎤 [SPEECH] Speech to text initialized: $_speechEnabled');
+
       onSpeechEnabledChange?.call(_speechEnabled);
     } catch (e) {
       debugPrint('Error initializing speech to text: $e');
@@ -227,7 +225,6 @@ class OpenAIDialogueService {
     try {
       // Set to male voice explicitly
       _realisticTts.setMaleVoice(preferredVoice: 'echo');
-      debugPrint('TTS voice set to male (echo)');
 
       // Set up callbacks for animation synchronization
       _realisticTts.onTTSCompleted = () {
@@ -295,11 +292,7 @@ class OpenAIDialogueService {
 
       _isListening = true;
       onListeningStateChange?.call(true);
-      debugPrint(
-        '🎤 [SPEECH] Started listening with extended timeout (60s) and pause tolerance (10s)',
-      );
     } catch (e) {
-      debugPrint('❌ [SPEECH] Error starting speech recognition: $e');
       await _handleSpeechError(e.toString());
     }
   }
@@ -314,8 +307,6 @@ class OpenAIDialogueService {
 
   /// Enhanced error handling and recovery for speech recognition
   Future<void> _handleSpeechError(String error) async {
-    debugPrint('🔄 [SPEECH] Handling speech error: $error');
-
     // Stop current listening session
     _isListening = false;
     onListeningStateChange?.call(false);
@@ -333,7 +324,6 @@ class OpenAIDialogueService {
 
       // Try to restart listening if speech is still enabled
       if (_speechEnabled) {
-        debugPrint('🔄 [SPEECH] Automatically restarting speech recognition');
         await startListening();
         return;
       }
@@ -346,8 +336,6 @@ class OpenAIDialogueService {
 
   /// Restart speech recognition when it gets stuck or times out
   Future<void> restartSpeechRecognition() async {
-    debugPrint('🔄 [SPEECH] Manually restarting speech recognition');
-
     // Stop current session
     if (_isListening) {
       await stopListening();
@@ -454,18 +442,14 @@ class OpenAIDialogueService {
     return '''
 You are a friendly, professional waiter at a restaurant. This is ALLERGY SAFETY TRAINING.
 
-CUSTOMER'S ACTUAL ALLERGIES: ${playerProfile.allergies.join(', ')}
 ALLERGY DISCLOSURE STATUS: ${hasDisclosedAllergies ? 'YES - They told you about: $previousAllergies' : 'NO - They haven\'t mentioned allergies yet'}
 ${selectedDish != null ? 'ORDERED DISH: $selectedDish' : 'NO ORDER YET'}
 
-SAFE MENU ITEMS (for this customer):
-${menuItems.where((item) => item.isSafe).map((item) => '✅ ${item.name}: ${item.description}').join('\n')}
-
-UNSAFE MENU ITEMS (contain their allergens):
-${menuItems.where((item) => !item.isSafe).map((item) => '⚠️ ${item.name}: ${item.description} (Contains: ${item.allergens.join(', ')})').join('\n')}
-
 FULL MENU (all items):
 ${menuItems.map((item) => '- ${item.name}: ${item.description}').join('\n')}
+
+MENU ALLERGEN INFORMATION:
+${menuItems.map((item) => '- ${item.name}: ${item.allergens.isNotEmpty ? 'Contains: ${item.allergens.join(', ')}' : 'No common allergens'}').join('\n')}
 
 REALISTIC TRAINING SCENARIOS:
 
@@ -476,22 +460,23 @@ REALISTIC TRAINING SCENARIOS:
 
 2. **If customer mentions allergies FIRST:**
    - Thank them for sharing
-   - Only suggest SAFE items from the menu
-   - Don't mention unsafe items at all
+   - Only suggest items that DON'T contain their mentioned allergens
+   - Be helpful in finding safe options
 
-3. **If customer orders UNSAFE food without mentioning allergies:**
+3. **If customer orders food without mentioning allergies:**
    - Ask gently: "Before I put in your order, do you have any food allergies I should know about?"
    - Wait for their response
 
-4. **If customer mentions allergies AFTER ordering unsafe food:**
-   - Immediately warn them: "I need to let you know that [dish] contains [allergen] which you mentioned you're allergic to. That wouldn't be safe for you."
+4. **If customer mentions allergies AFTER ordering:**
+   - Check if their order contains any of the allergens they mentioned
+   - If it does, warn them: "I need to let you know that [dish] contains [allergen] which you mentioned you're allergic to. That wouldn't be safe for you."
    - Suggest safe alternatives instead
 
 5. **If customer asks about ingredients:**
-   - Give honest, accurate information
-   - Don't volunteer allergy info unless they ask
+   - Give honest, accurate information from the menu allergen information
+   - Don't assume they have specific allergies unless they tell you
 
-${orderedUnsafeFood ? '\n🚨 SAFETY ALERT: Customer ordered unsafe food! You must warn them about the allergens!' : ''}
+IMPORTANT: You should ONLY know about allergies that the customer has explicitly told you about. Do NOT assume they have allergies they haven't mentioned.
 
 Recent conversation:
 $recentMessages
@@ -701,25 +686,18 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
     List<MenuItem> menuItems,
   ) {
     try {
-      debugPrint('Raw OpenAI response: $openaiResponse');
-
-      // Clean the response - remove any text before/after JSON
       String cleanedResponse = openaiResponse.trim();
 
-      // Remove markdown code blocks if present
       cleanedResponse = cleanedResponse
           .replaceAll('```json', '')
           .replaceAll('```', '');
 
-      // Find JSON boundaries
       int jsonStart = cleanedResponse.indexOf('{');
       int jsonEnd = cleanedResponse.lastIndexOf('}');
 
       if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
         cleanedResponse = cleanedResponse.substring(jsonStart, jsonEnd + 1);
       }
-
-      debugPrint('Cleaned response for parsing: $cleanedResponse');
 
       final jsonResponse = json.decode(cleanedResponse) as Map<String, dynamic>;
 
@@ -766,7 +744,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
         shouldEndConversation: shouldEndConversation,
       );
     } catch (e) {
-      debugPrint('JSON parsing failed, attempting error recovery: $e');
       return _performErrorRecovery(
         openaiResponse,
         userInput,
@@ -922,18 +899,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
       confirmedDish: selectedDish != null,
       turnCount: context.turnCount + 1,
       topicsCovered: newTopics,
-    );
-
-    // Debug logging for context updates
-    debugPrint('🔄 [CONTEXT] Updated conversation context:');
-    debugPrint('  - userInput: "$userInput"');
-    debugPrint('  - allergiesDisclosed: ${updatedContext.allergiesDisclosed}');
-    debugPrint('  - selectedDish: ${updatedContext.selectedDish}');
-    debugPrint('  - confirmedDish: ${updatedContext.confirmedDish}');
-    debugPrint('  - turnCount: ${updatedContext.turnCount}');
-    debugPrint('  - disclosedAllergies: ${updatedContext.disclosedAllergies}');
-    debugPrint(
-      '  - isJustAskingAboutDish: ${_isJustAskingAboutDish(userInput.toLowerCase())}',
     );
 
     return updatedContext;
@@ -1205,9 +1170,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
         lowerDialogue.contains('?');
 
     if (isWarningOrQuestion) {
-      debugPrint(
-        '🔄 [CONTINUE] AI dialogue contains warning/question - continuing conversation: "$npcDialogue"',
-      );
       return false;
     }
 
@@ -1262,8 +1224,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
     PlayerProfile playerProfile,
     ConversationContext context,
   ) {
-    debugPrint('Starting error recovery for response: $openaiResponse');
-
     // Try to extract dialogue from broken response
     String npcDialogue = openaiResponse.trim();
 
@@ -1278,7 +1238,7 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
       final match = pattern.firstMatch(openaiResponse);
       if (match != null && match.group(1) != null) {
         npcDialogue = match.group(1)!;
-        debugPrint('Extracted dialogue: $npcDialogue');
+
         break;
       }
     }
@@ -1304,8 +1264,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
         );
       }
     }
-
-    debugPrint('Using dialogue: $npcDialogue');
 
     // Perform basic allergy detection
     final detectedAllergies = <String>[];
@@ -1514,9 +1472,7 @@ Respond with JSON only:
     try {
       // Use the realistic TTS service with natural voice
       await _realisticTts.speakWithNaturalVoice(text);
-      debugPrint('Realistic TTS speech started successfully');
     } catch (e) {
-      debugPrint('Error with TTS: $e');
       onError?.call('Failed to play speech');
       onTTSCompleted?.call(); // Trigger completion on error
     }
@@ -1525,9 +1481,7 @@ Respond with JSON only:
   Future<void> stopSpeaking() async {
     try {
       await _realisticTts.stopSpeaking();
-    } catch (e) {
-      debugPrint('Error stopping TTS: $e');
-    }
+    } catch (e) {}
   }
 
   bool get isListening => _isListening;

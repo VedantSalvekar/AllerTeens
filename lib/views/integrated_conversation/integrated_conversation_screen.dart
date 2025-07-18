@@ -294,6 +294,7 @@ class _IntegratedConversationScreenState
             scenarioId: _aiController.scenarioId,
             sessionStart: _aiController.sessionStartTime ?? DateTime.now(),
             sessionEnd: DateTime.now(),
+            conversationContext: _aiController.conversationContext,
           );
 
       // Show feedback screen with incomplete conversation indicator

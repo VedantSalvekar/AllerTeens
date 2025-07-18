@@ -18,10 +18,9 @@ class AssessmentEngine {
     required String scenarioId,
     required DateTime sessionStart,
     required DateTime sessionEnd,
+    ConversationContext? conversationContext,
   }) async {
     try {
-      debugPrint('🔍 [ASSESSMENT] Starting BEGINNER session assessment');
-
       // BEGINNER ASSESSMENT - Focus on key skills:
       // 1. Did they mention their allergies? (0-70 points)
       // 2. Did they order safe food? (0-30 points)
@@ -33,89 +32,120 @@ class AssessmentEngine {
       String? selectedDish;
       List<String> unsafeAllergens = [];
 
-      // FIXED: Check if allergies were actually disclosed using proper logic
-      for (final turn in conversationTurns) {
-        if (_isActuallyDisclosingAllergies(
-          turn.userInput.toLowerCase(),
-          playerProfile.allergies,
-        )) {
-          mentionedAllergies = true;
-          debugPrint(
-            '🔍 [ASSESSMENT] Found allergy disclosure in: "${turn.userInput}"',
-          );
-          break;
-        }
-      }
+      // FIXED: Use conversation context state if available, otherwise fall back to text analysis
+      if (conversationContext != null) {
+        // Use the reliable conversation context state
+        mentionedAllergies = conversationContext.allergiesDisclosed;
+        selectedDish = conversationContext.selectedDish;
 
-      // Check if they ordered food and analyze safety
-      for (final turn in conversationTurns) {
-        final userInput = turn.userInput.toLowerCase();
+        // Check if selected dish is safe based on known allergens
+        if (selectedDish != null) {
+          final dishAllergens = _getDishAllergens(selectedDish);
+          final userAllergens = playerProfile.allergies
+              .map((a) => a.toLowerCase())
+              .toSet();
 
-        // Check if they ordered something
-        if (userInput.contains('i\'ll have') ||
-            userInput.contains('i will have') ||
-            userInput.contains('i want') ||
-            userInput.contains('i\'d like') ||
-            userInput.contains('i would like') ||
-            userInput.contains('i\'ll take') ||
-            userInput.contains('i will take') ||
-            userInput.contains('order')) {
-          // Extract dish and check safety
-          if (userInput.contains('salad')) {
-            selectedDish = 'Caesar Salad';
-            // Check if Caesar salad contains allergens
-            if (playerProfile.allergies.contains('Eggs')) {
-              orderedUnsafeFood = true;
-              unsafeAllergens.add('Eggs');
-            }
-          } else if (userInput.contains('veggie') ||
-              userInput.contains('vegetable')) {
-            selectedDish = 'Grilled Veggie Bowl';
-            orderedSafeFood = true; // Generally safe
-          } else if (userInput.contains('chicken')) {
-            selectedDish = 'Grilled Chicken';
-            orderedSafeFood = true; // Generally safe
-          } else if (userInput.contains('fish')) {
-            selectedDish = 'Fish & Chips';
-            // Check if they're allergic to fish
-            if (playerProfile.allergies.contains('Fish')) {
-              orderedUnsafeFood = true;
-              unsafeAllergens.add('Fish');
-            } else {
-              orderedSafeFood = true;
-            }
-          } else if (userInput.contains('soup')) {
-            selectedDish = 'Tomato Soup';
-            orderedSafeFood = true; // Generally safe
-          } else if (userInput.contains('brownie') ||
-              userInput.contains('chocolate')) {
-            selectedDish = 'Chocolate Brownie';
-            // Chocolate brownie typically contains milk and eggs
-            final brownieAllergens = ['Milk', 'Eggs'];
-            bool hasAllergenInBrownie = false;
-            for (final allergen in brownieAllergens) {
-              if (playerProfile.allergies.contains(allergen)) {
-                orderedUnsafeFood = true;
-                unsafeAllergens.add(allergen);
-                hasAllergenInBrownie = true;
-              }
-            }
-            if (!hasAllergenInBrownie) {
-              orderedSafeFood = true;
+          // Check if dish contains any user allergens
+          bool containsUserAllergens = false;
+          for (final allergen in dishAllergens) {
+            if (userAllergens.contains(allergen.toLowerCase())) {
+              containsUserAllergens = true;
+              unsafeAllergens.add(allergen);
             }
           }
-          break;
-        }
-      }
 
-      // If they mentioned allergies but didn't order anything unsafe, check AI confirmation
-      if (mentionedAllergies && !orderedUnsafeFood && selectedDish != null) {
-        for (final turn in conversationTurns) {
-          if (turn.aiResponse.toLowerCase().contains('safe') ||
-              turn.aiResponse.toLowerCase().contains('free from') ||
-              turn.aiResponse.toLowerCase().contains('doesn\'t contain')) {
+          if (containsUserAllergens) {
+            orderedUnsafeFood = true;
+            orderedSafeFood = false;
+          } else {
             orderedSafeFood = true;
+            orderedUnsafeFood = false;
+          }
+        }
+      } else {
+        // Fall back to text analysis for older sessions
+        // FIXED: Check if allergies were actually disclosed using proper logic
+        for (final turn in conversationTurns) {
+          if (_isActuallyDisclosingAllergies(
+            turn.userInput.toLowerCase(),
+            playerProfile.allergies,
+          )) {
+            mentionedAllergies = true;
+
             break;
+          }
+        }
+
+        // Check if they ordered food and analyze safety
+        for (final turn in conversationTurns) {
+          final userInput = turn.userInput.toLowerCase();
+
+          // Check if they ordered something
+          if (userInput.contains('i\'ll have') ||
+              userInput.contains('i will have') ||
+              userInput.contains('i want') ||
+              userInput.contains('i\'d like') ||
+              userInput.contains('i would like') ||
+              userInput.contains('i\'ll take') ||
+              userInput.contains('i will take') ||
+              userInput.contains('order')) {
+            // Extract dish and check safety
+            if (userInput.contains('salad')) {
+              selectedDish = 'Caesar Salad';
+              // Check if Caesar salad contains allergens
+              if (playerProfile.allergies.contains('Eggs')) {
+                orderedUnsafeFood = true;
+                unsafeAllergens.add('Eggs');
+              }
+            } else if (userInput.contains('veggie') ||
+                userInput.contains('vegetable')) {
+              selectedDish = 'Grilled Veggie Bowl';
+              orderedSafeFood = true; // Generally safe
+            } else if (userInput.contains('chicken')) {
+              selectedDish = 'Grilled Chicken';
+              orderedSafeFood = true; // Generally safe
+            } else if (userInput.contains('fish')) {
+              selectedDish = 'Fish & Chips';
+              // Check if they're allergic to fish
+              if (playerProfile.allergies.contains('Fish')) {
+                orderedUnsafeFood = true;
+                unsafeAllergens.add('Fish');
+              } else {
+                orderedSafeFood = true;
+              }
+            } else if (userInput.contains('soup')) {
+              selectedDish = 'Tomato Soup';
+              orderedSafeFood = true; // Generally safe
+            } else if (userInput.contains('brownie') ||
+                userInput.contains('chocolate')) {
+              selectedDish = 'Chocolate Brownie';
+              // Chocolate brownie typically contains milk and eggs
+              final brownieAllergens = ['Milk', 'Eggs'];
+              bool hasAllergenInBrownie = false;
+              for (final allergen in brownieAllergens) {
+                if (playerProfile.allergies.contains(allergen)) {
+                  orderedUnsafeFood = true;
+                  unsafeAllergens.add(allergen);
+                  hasAllergenInBrownie = true;
+                }
+              }
+              if (!hasAllergenInBrownie) {
+                orderedSafeFood = true;
+              }
+            }
+            break;
+          }
+        }
+
+        // If they mentioned allergies but didn't order anything unsafe, check AI confirmation
+        if (mentionedAllergies && !orderedUnsafeFood && selectedDish != null) {
+          for (final turn in conversationTurns) {
+            if (turn.aiResponse.toLowerCase().contains('safe') ||
+                turn.aiResponse.toLowerCase().contains('free from') ||
+                turn.aiResponse.toLowerCase().contains('doesn\'t contain')) {
+              orderedSafeFood = true;
+              break;
+            }
           }
         }
       }
@@ -187,23 +217,8 @@ class AssessmentEngine {
         unsafeOrderPenalty: unsafeOrderPenalty, // Add penalty to result
       );
 
-      debugPrint(
-        '🔍 [ASSESSMENT] Allergy detection result: mentionedAllergies=$mentionedAllergies',
-      );
-      debugPrint(
-        '🔍 [ASSESSMENT] Safety result: orderedSafeFood=$orderedSafeFood',
-      );
-      debugPrint(
-        '🔍 [ASSESSMENT] Unsafe order: orderedUnsafeFood=$orderedUnsafeFood, allergens=$unsafeAllergens',
-      );
-      debugPrint('🔍 [ASSESSMENT] Penalty applied: $unsafeOrderPenalty points');
-      debugPrint(
-        '✅ [ASSESSMENT] BEGINNER Assessment completed - Total Score: ${result.totalScore}',
-      );
       return result;
     } catch (e) {
-      debugPrint('❌ [ASSESSMENT] Error during assessment: $e');
-      // Return fallback assessment
       return _getFallbackAssessment();
     }
   }
@@ -241,7 +256,6 @@ class AssessmentEngine {
         detectedSkills: detectedSkills,
       );
     } catch (e) {
-      debugPrint('⚠️ [ASSESSMENT] Error assessing turn: $e');
       return const TurnAssessment(
         allergyMentionScore: 0,
         clarityScore: 5,
@@ -270,7 +284,6 @@ class AssessmentEngine {
       final response = await _sendAssessmentRequest(prompt);
       return jsonDecode(response);
     } catch (e) {
-      debugPrint('⚠️ [ASSESSMENT] AI assessment failed, using rule-based: $e');
       return {
         'confidence': 6,
         'politeness': 8,
@@ -706,6 +719,22 @@ Respond with JSON only:
           'Keep practicing! Focus on mentioning your allergies early and asking about ingredients.',
       assessedAt: DateTime.now(),
     );
+  }
+
+  /// Get known allergens for a dish
+  List<String> _getDishAllergens(String dishName) {
+    final dishAllergens = <String, List<String>>{
+      'Chicken Satay Bowl': ['Peanut', 'Soy', 'Sesame'],
+      'Caesar Salad': ['Egg', 'Dairy', 'Gluten', 'Anchovy'],
+      'Grilled Veggie Bowl': [], // No allergens
+      'Tomato Basil Soup': ['Dairy', 'Gluten'],
+      'Fish & Chips': ['Fish', 'Gluten', 'Egg'],
+      'Chocolate Brownie': ['Dairy', 'Egg', 'Tree Nuts', 'Gluten'],
+      'Grilled Chicken': [], // Generally safe
+      'Tomato Soup': ['Dairy', 'Gluten'],
+    };
+
+    return dishAllergens[dishName] ?? [];
   }
 
   /// Check if user is actually disclosing allergies vs ordering food

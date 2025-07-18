@@ -103,11 +103,9 @@ class AIConversationController extends ChangeNotifier {
           conversationTurns: [],
           status: SessionStatus.inProgress,
         );
-
-        debugPrint('🎯 [TRAINING] Started new training session: $sessionId');
       }
     } catch (e) {
-      debugPrint('❌ [TRAINING] Failed to start training session: $e');
+      onError?.call('Failed to start training session');
     }
   }
 
@@ -137,15 +135,10 @@ class AIConversationController extends ChangeNotifier {
   // Enhanced method to process user input with training assessment
   Future<void> processUserInputWithAssessment(String userInput) async {
     try {
-      debugPrint('🎯 [TRAINING] Processing user input: $userInput');
-
-      // Check if conversation has ended
       if (_conversationEnded) {
-        debugPrint('🎯 [TRAINING] Conversation has ended, ignoring input');
         return;
       }
 
-      // Immediately clear user speech text and stop listening to prevent overlaps
       _userSpeechText = '';
       onTranscriptionUpdate?.call('');
       await _openaiService.stopListening();
@@ -154,46 +147,35 @@ class AIConversationController extends ChangeNotifier {
       _isProcessingAI = true;
       onProcessingStateChange?.call(true);
 
-      // Set thinking animation while processing (only if not currently speaking)
       if (_isWaiterSpeaking) {
-        debugPrint(
-          '💭 [INPUT] User input received but waiter is speaking, stopping TTS first',
-        );
         await _openaiService.stopSpeaking();
         _isWaiterSpeaking = false;
       }
 
-      debugPrint('💭 [INPUT] User input received, setting thinking animation');
       _setWaiterAnimation('thinking');
 
-      // Force UI update to clear speech bubble immediately
       notifyListeners();
 
-      // Get current user profile
       final user = await _authService.getCurrentUserModel();
       if (user == null) {
         onError?.call('User not authenticated');
         return;
       }
 
-      // Analyze user input for allergy mentions
       final mentionedAllergies = _analyzeAllergyMentions(
         userInput,
         user.allergies,
       );
       if (mentionedAllergies.isNotEmpty) {
         _allergyMentionCount++;
-        debugPrint('✅ [TRAINING] Allergy mentioned: $mentionedAllergies');
       }
 
-      // Create training context separately from user input
       final trainingContext = _createTrainingContext(
         user,
         _totalTurns,
         _allergyMentionCount,
       );
 
-      // Get AI response with clean user input (temporarily revert to original working approach)
       final response = await _openaiService.getOpenAIResponse(
         userInput: userInput,
         currentStep: SimulationStep(
@@ -219,8 +201,6 @@ class AIConversationController extends ChangeNotifier {
         scenarioContext: 'restaurant_training',
         context: _conversationContext,
       );
-
-      // Create conversation turn for assessment
       final conversationTurn = ConversationTurn(
         userInput: userInput,
         aiResponse: response.npcDialogue,
@@ -243,21 +223,17 @@ class AIConversationController extends ChangeNotifier {
 
       _conversationTurns.add(conversationTurn);
 
-      // Update UI with conversation messages
       _updateConversationMessages(userInput, response.npcDialogue);
 
-      // Check if training should end
       if (_shouldEndTraining(response)) {
         await _endTrainingSession();
-        return; // Don't continue processing after training ends
+        return;
       } else {
-        // Continue conversation
         _conversationContext = response.updatedContext;
         _setWaiterAnimation(_determineAnimationType(response));
         await _speakNPCResponse(response.npcDialogue);
       }
     } catch (e) {
-      debugPrint('❌ [TRAINING] Error processing user input: $e');
       onError?.call(
         'Sorry, I had trouble processing your message. Please try again.',
       );
@@ -269,13 +245,21 @@ class AIConversationController extends ChangeNotifier {
     }
   }
 
-  // Analyze user input for allergy mentions
   List<String> _analyzeAllergyMentions(
     String userInput,
     List<String> userAllergies,
   ) {
     final mentionedAllergies = <String>[];
     final lowerInput = userInput.toLowerCase();
+
+    final isDisclosingAllergies = _isActuallyDisclosingAllergies(
+      lowerInput,
+      userAllergies,
+    );
+
+    if (!isDisclosingAllergies) {
+      return mentionedAllergies;
+    }
 
     for (final allergy in userAllergies) {
       if (lowerInput.contains(allergy.toLowerCase()) ||
@@ -285,35 +269,120 @@ class AIConversationController extends ChangeNotifier {
       }
     }
 
-    // Also check for general allergy keywords
     if (lowerInput.contains('allergy') ||
         lowerInput.contains('allergic') ||
         lowerInput.contains('reaction')) {
-      // Add detected allergy keywords
       mentionedAllergies.addAll(['allergy_mentioned']);
     }
 
     return mentionedAllergies;
   }
 
-  // Create training context separately from user input
+  bool _isActuallyDisclosingAllergies(
+    String lowerInput,
+    List<String> userAllergies,
+  ) {
+    final allergyDisclosurePatterns = [
+      'i\'m allergic to',
+      'i am allergic to',
+      'i have allergies',
+      'i have allergy',
+      'i have an allergy',
+      'my allergies are',
+      'my allergy is',
+      'i can\'t eat',
+      'i cannot eat',
+      'i\'m intolerant to',
+      'i am intolerant to',
+      'i have a sensitivity to',
+      'i react to',
+      'i\'m sensitive to',
+      'i am sensitive to',
+      'allergic to',
+      'allergy to',
+      'intolerant to',
+      'sensitive to',
+      'reaction to',
+      'can\'t have',
+      'cannot have',
+      'i avoid',
+      'i stay away from',
+      'bad reaction to',
+      'makes me sick',
+      'doctor said',
+      'doctor told me',
+      'advised not to eat',
+      'told not to eat',
+      'not supposed to eat',
+      'shouldn\'t eat',
+      'mustn\'t eat',
+      'restricted from',
+      'forbidden from eating',
+      'yes, i have',
+      'yes i have',
+      'yes, i\'m allergic',
+      'yes i\'m allergic',
+      'yes, i am allergic',
+      'yes i am allergic',
+    ];
+
+    for (final pattern in allergyDisclosurePatterns) {
+      if (lowerInput.contains(pattern)) {
+        return true;
+      }
+    }
+
+    final foodOrderingPatterns = [
+      'i\'ll have',
+      'i will have',
+      'i want',
+      'i\'d like',
+      'i would like',
+      'i\'ll take',
+      'i will take',
+      'i\'ll order',
+      'i will order',
+      'i\'ll get',
+      'i will get',
+      'give me',
+      'can i have',
+      'can i get',
+      'order',
+      'menu',
+      'what do you have',
+      'what can i have',
+      'what options',
+      'recommend',
+      'suggest',
+    ];
+
+    for (final pattern in foodOrderingPatterns) {
+      if (lowerInput.contains(pattern)) {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   String _createTrainingContext(
     dynamic user,
     int totalTurns,
     int allergyMentionCount,
   ) {
-    // Add training context based on performance
     if (totalTurns >= 3 && allergyMentionCount == 0) {
-      return '''[TRAINING CONTEXT: User has NOT mentioned their allergies (${user.allergies.join(', ')}) in $totalTurns turns. 
+      return '''[TRAINING CONTEXT: User has NOT mentioned any allergies in $totalTurns turns. 
 This is a BEGINNER training session. The AI waiter should:
-- Give GENTLE but CLEAR negative feedback about not mentioning allergies
+- Give GENTLE but CLEAR guidance about allergy disclosure
 - Explain WHY allergy disclosure is important for safety
-- Encourage the user to mention their allergies proactively
+- Encourage the user to mention any allergies they might have
 - Ask direct questions about allergies if needed
-- Be supportive but emphasize the importance of food safety]''';
+- Be supportive but emphasize the importance of food safety
+- DO NOT assume what allergies the user has - only respond to what they tell you]''';
     } else if (totalTurns >= 2 && allergyMentionCount == 0) {
-      return '''[TRAINING CONTEXT: User should mention their allergies (${user.allergies.join(', ')}) soon.
-Gently prompt them to share any dietary restrictions or allergies.]''';
+      return '''[TRAINING CONTEXT: User should mention any allergies they have soon.
+Gently prompt them to share any dietary restrictions or allergies.
+DO NOT assume what allergies they have - only respond to what they tell you.]''';
     } else if (allergyMentionCount > 0) {
       return '''[TRAINING CONTEXT: Great! User has mentioned allergies. 
 Provide positive reinforcement and continue with helpful service.]''';
@@ -322,7 +391,6 @@ Provide positive reinforcement and continue with helpful service.]''';
     return '';
   }
 
-  // Update conversation messages in UI
   void _updateConversationMessages(String userInput, String aiResponse) {
     final userMessage = ConversationMessage(
       role: 'user',
@@ -341,21 +409,12 @@ Provide positive reinforcement and continue with helpful service.]''';
     notifyListeners();
   }
 
-  // Check if training should end
   bool _shouldEndTraining(NPCDialogueResponse response) {
-    // FIXED: Make training more user-friendly and realistic
-    // End training if:
-    // 1. User completed order AND indicates completion (regardless of allergy disclosure)
-    // 2. User disclosed allergies AND completed SAFE order (ideal scenario)
-    // 3. AI explicitly indicates conversation should end
-    // 4. Training has gone on too long (> 8 turns to prevent infinite loops)
-
     final hasDisclosedAllergies = _conversationContext.allergiesDisclosed;
     final hasCompletedOrder =
         _conversationContext.confirmedDish &&
         _conversationContext.selectedDish != null;
 
-    // CRITICAL FIX: Check if AI just gave a safety warning about the current order
     final aiJustGaveSafetyWarning =
         response.npcDialogue.toLowerCase().contains('wouldn\'t be safe') ||
         response.npcDialogue.toLowerCase().contains('not safe') ||
@@ -368,7 +427,6 @@ Provide positive reinforcement and continue with helpful service.]''';
           'consider a different dish',
         );
 
-    // Check if user has indicated they're done/satisfied
     final lastUserInput = _conversationTurns.isNotEmpty
         ? _conversationTurns.last.userInput.toLowerCase()
         : '';
@@ -381,7 +439,6 @@ Provide positive reinforcement and continue with helpful service.]''';
         lastUserInput.contains('i don\'t need') ||
         lastUserInput.contains('nothing else');
 
-    // Check if user is just asking questions (don't end training)
     final isJustAskingQuestions =
         lastUserInput.contains('what can i have') ||
         lastUserInput.contains('what can i eat') ||
@@ -392,17 +449,9 @@ Provide positive reinforcement and continue with helpful service.]''';
         lastUserInput.contains('suggest') ||
         lastUserInput.contains('menu');
 
-    // If AI explicitly indicates conversation should end
     final aiIndicatesEnd = response.shouldEndConversation;
-
-    // Force end if too many turns to prevent infinite loops
     final tooManyTurns = _totalTurns > 8;
 
-    // FIXED: Don't end training if AI just gave a safety warning - user needs to reorder
-    // End training if:
-    // - User completed order AND indicates completion (regardless of allergy disclosure)
-    // - User disclosed allergies AND completed order AND no safety warning (ideal scenario)
-    // - AI indicates end OR too many turns
     final shouldEnd =
         ((hasCompletedOrder && userIndicatesCompletion) ||
             (hasDisclosedAllergies &&
@@ -412,40 +461,18 @@ Provide positive reinforcement and continue with helpful service.]''';
             tooManyTurns) &&
         !isJustAskingQuestions;
 
-    debugPrint('🔍 [TRAINING] Checking end conditions:');
-    debugPrint('  - totalTurns: $_totalTurns');
-    debugPrint('  - hasDisclosedAllergies: $hasDisclosedAllergies');
-    debugPrint('  - hasCompletedOrder: $hasCompletedOrder');
-    debugPrint('  - aiJustGaveSafetyWarning: $aiJustGaveSafetyWarning');
-    debugPrint('  - userIndicatesCompletion: $userIndicatesCompletion');
-    debugPrint('  - isJustAskingQuestions: $isJustAskingQuestions');
-    debugPrint('  - aiIndicatesEnd: $aiIndicatesEnd');
-    debugPrint('  - tooManyTurns: $tooManyTurns');
-    debugPrint('  - shouldEnd: $shouldEnd');
-    debugPrint('  - allergyMentionCount: $_allergyMentionCount');
-    debugPrint('  - confirmedDish: ${_conversationContext.confirmedDish}');
-    debugPrint('  - selectedDish: ${_conversationContext.selectedDish}');
-    debugPrint('  - lastUserInput: "$lastUserInput"');
-
     return shouldEnd;
   }
 
-  // End training session and show feedback
   Future<void> _endTrainingSession() async {
     try {
-      debugPrint('🎯 [TRAINING] Ending training session');
-
-      // Mark conversation as ended to prevent further input
       _conversationEnded = true;
 
-      // Add a completion message and show dialog
-      // CRITICAL FIX: Only confirm safe orders, not unsafe ones user was warned about
       final hasActualSafeOrder =
           _conversationContext.selectedDish != null &&
           _conversationContext.confirmedDish &&
           _conversationContext.allergiesDisclosed;
 
-      // Check if the last conversation turn had the AI warning about safety
       final lastAIResponse = _conversationTurns.isNotEmpty
           ? _conversationTurns.last.aiResponse.toLowerCase()
           : '';
@@ -457,15 +484,12 @@ Provide positive reinforcement and continue with helpful service.]''';
 
       String completionContent;
       if (hasActualSafeOrder && !hadSafetyWarning) {
-        // User has a confirmed safe order
         completionContent =
             "Perfect! Your ${_conversationContext.selectedDish} is all set and will be prepared safely for your allergies. Your training session is now complete. Well done!";
       } else if (_conversationContext.allergiesDisclosed) {
-        // User disclosed allergies but either no safe order or had safety warning
         completionContent =
             "Excellent work! You did a great job communicating about your allergies and staying safe by avoiding unsafe food. That's the most important part of dining safely. Your training session is now complete. Well done!";
       } else {
-        // Fallback for incomplete training
         completionContent =
             "Training session complete! Remember: always tell your waiter about your food allergies to stay safe. Keep practicing!";
       }
@@ -479,22 +503,14 @@ Provide positive reinforcement and continue with helpful service.]''';
       _displayMessages.add(completionMessage);
       onMessagesUpdate?.call(_displayMessages);
 
-      // Speak the completion message and wait for it to finish
       await _speakNPCResponse(completionMessage.content);
 
-      // Wait for TTS to complete before showing completion dialog
-      // The completion dialog will be triggered by the TTS completion callback
       _waitingForCompletionDialog = true;
-      debugPrint(
-        '🎯 [TRAINING] Waiting for TTS to complete before showing completion dialog',
-      );
 
       if (_currentSession == null) {
-        debugPrint('❌ [TRAINING] No active session to end');
         return;
       }
 
-      // Update session with final data
       final completedSession = TrainingSession(
         sessionId: _currentSession!.sessionId,
         userId: _currentSession!.userId,
@@ -508,7 +524,6 @@ Provide positive reinforcement and continue with helpful service.]''';
             .inMinutes,
       );
 
-      // Generate assessment
       final user = await _authService.getCurrentUserModel();
       final assessment = await _assessmentEngine.assessTrainingSession(
         conversationTurns: _conversationTurns,
@@ -521,9 +536,9 @@ Provide positive reinforcement and continue with helpful service.]''';
         scenarioId: _currentSession!.scenarioId,
         sessionStart: _currentSession!.startTime,
         sessionEnd: DateTime.now(),
+        conversationContext: _conversationContext,
       );
 
-      // Save session and update progress (with graceful error handling)
       try {
         await _progressService.saveTrainingSession(completedSession);
         await _progressService.updateUserProgress(
@@ -532,23 +547,13 @@ Provide positive reinforcement and continue with helpful service.]''';
           assessment: assessment,
           session: completedSession,
         );
-        debugPrint('✅ [TRAINING] Progress saved to cloud successfully');
       } catch (saveError) {
-        debugPrint(
-          '⚠️ [TRAINING] Could not save to cloud, but training completed: $saveError',
-        );
         // Continue with feedback screen even if cloud save fails
       }
 
-      // Store assessment for later use - don't show feedback screen yet
       _completedAssessment = assessment;
       _hasCompletedTraining = true;
-
-      debugPrint('✅ [TRAINING] Training session completed successfully');
     } catch (e) {
-      debugPrint('❌ [TRAINING] Error ending training session: $e');
-
-      // Still try to show feedback screen with a fallback assessment
       if (onSessionCompleted != null) {
         final fallbackAssessment = AssessmentResult(
           allergyDisclosureScore: 8,
@@ -577,11 +582,8 @@ Provide positive reinforcement and continue with helpful service.]''';
     }
   }
 
-  // Handle premature exit
   Future<void> handlePrematureExit() async {
     try {
-      debugPrint('⚠️ [TRAINING] Handling premature exit');
-
       if (_currentSession != null) {
         final abandonedSession = TrainingSession(
           sessionId: _currentSession!.sessionId,
@@ -597,10 +599,9 @@ Provide positive reinforcement and continue with helpful service.]''';
         );
 
         await _progressService.saveTrainingSession(abandonedSession);
-        debugPrint('✅ [TRAINING] Premature exit handled');
       }
     } catch (e) {
-      debugPrint('❌ [TRAINING] Error handling premature exit: $e');
+      // Handle error silently
     }
   }
 
@@ -632,19 +633,11 @@ Provide positive reinforcement and continue with helpful service.]''';
       notifyListeners();
     };
 
-    // TTS animation synchronization callbacks
     _openaiService.onTTSStarted = () {
-      debugPrint(
-        '🔊 [TTS] TTS STARTED - Current animation state: $_currentAnimationState',
-      );
-      debugPrint('🔊 [TTS] Starting talking animation directly');
       _isWaiterSpeaking = true;
-
-      // Directly trigger talking animation through game, bypassing _setWaiterAnimation
       _currentAnimationState = 'talking';
       _game?.onAIStartSpeaking();
 
-      // Show subtitles with the latest AI message
       final latestAI = _getLatestAIMessage();
       if (latestAI != null) {
         onSubtitleShow?.call(latestAI);
@@ -654,27 +647,14 @@ Provide positive reinforcement and continue with helpful service.]''';
     };
 
     _openaiService.onTTSCompleted = () {
-      debugPrint(
-        '🔊 [TTS] TTS COMPLETED - Current animation state: $_currentAnimationState',
-      );
-      debugPrint('🔊 [TTS] Stopping talking animation');
       _isWaiterSpeaking = false;
-
-      // Force the animation to idle state when TTS completes
-      _currentAnimationState = 'idle'; // Direct assignment to bypass blocking
+      _currentAnimationState = 'idle';
       _game?.onAIStopSpeaking();
 
-      // Hide subtitles when TTS completes
       onSubtitleHide?.call();
 
-      // Check if we should show the completion dialog now that TTS is done
       if (_waitingForCompletionDialog) {
         _waitingForCompletionDialog = false;
-        debugPrint(
-          '🎯 [TRAINING] TTS completed, showing completion dialog after delay',
-        );
-
-        // Add small delay to ensure audio is fully finished
         Future.delayed(const Duration(milliseconds: 300), () {
           onConversationEnded?.call();
         });
@@ -685,10 +665,8 @@ Provide positive reinforcement and continue with helpful service.]''';
   }
 
   void _startConversation() {
-    // Reset conversation for new session
     _openaiService.resetConversation();
 
-    // Add initial AI greeting
     final initialMessage = ConversationMessage(
       role: 'assistant',
       content:
@@ -699,7 +677,6 @@ Provide positive reinforcement and continue with helpful service.]''';
     _displayMessages = [initialMessage];
     onMessagesUpdate?.call(_displayMessages);
 
-    // Start waiter greeting animation and then speak
     _setWaiterAnimation('greeting');
 
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -740,11 +717,9 @@ Provide positive reinforcement and continue with helpful service.]''';
     onMessagesUpdate?.call(_displayMessages);
     notifyListeners();
 
-    // Set waiter to thinking/processing animation
     _setWaiterAnimation('thinking');
 
     try {
-      // Create mock simulation step for AI conversation
       final mockStep = SimulationStep(
         id: 'interactive_ai_conversation',
         backgroundImagePath: 'backgrounds/restaurant_interior.png',
@@ -759,7 +734,6 @@ Provide positive reinforcement and continue with helpful service.]''';
         enableAIDialogue: true,
       );
 
-      // Create realistic player profile from authenticated user
       final authState = _authService.currentUser;
       final userModel = await _authService.getCurrentUserModel();
       final playerProfile = PlayerProfile(
@@ -769,7 +743,6 @@ Provide positive reinforcement and continue with helpful service.]''';
         allergies: userModel?.allergies ?? [],
       );
 
-      // Get AI response
       final aiResponse = await _openaiService.getOpenAIResponse(
         userInput: userInput,
         currentStep: mockStep,
@@ -780,7 +753,6 @@ Provide positive reinforcement and continue with helpful service.]''';
         context: _conversationContext,
       );
 
-      // Add AI response to display
       final aiMessage = ConversationMessage(
         role: 'assistant',
         content: aiResponse.npcDialogue,
@@ -793,21 +765,15 @@ Provide positive reinforcement and continue with helpful service.]''';
       onMessagesUpdate?.call(_displayMessages);
       notifyListeners();
 
-      // Determine animation based on response sentiment (for feedback animations)
       final animationType = _determineAnimationType(aiResponse);
 
-      // Only set non-talking animations here - talking will be handled by TTS events
       if (animationType != 'talking') {
         _setWaiterAnimation(animationType);
       }
 
-      // Speak the AI response - TTS events will handle talking animation
       await _speakNPCResponse(aiResponse.npcDialogue);
     } catch (e) {
-      debugPrint('Error processing user speech: $e');
       onError?.call('Sorry, I had trouble understanding. Please try again.');
-
-      // Reset to idle animation on error
       _setWaiterAnimation('idle');
     } finally {
       _isProcessingAI = false;
@@ -843,25 +809,13 @@ Provide positive reinforcement and continue with helpful service.]''';
   }
 
   void _setWaiterAnimation(String animationType) {
-    debugPrint(
-      '🎭 [ANIMATION] Setting waiter animation to: $animationType (current: $_currentAnimationState)',
-    );
-
-    // Prevent overriding talking animation unless it's a stop command or another talking command
     if (_currentAnimationState == 'talking' &&
         animationType != 'talking' &&
         animationType != 'idle') {
-      debugPrint(
-        '🎭 [ANIMATION] Blocking animation change from talking to $animationType - waiter is currently speaking',
-      );
       return;
     }
 
-    // Skip direct 'talking' animation triggers - only allow through TTS callbacks
     if (animationType == 'talking') {
-      debugPrint(
-        '🎭 [ANIMATION] Skipping direct talking animation trigger - will be handled by TTS callback',
-      );
       return;
     }
 
@@ -869,23 +823,18 @@ Provide positive reinforcement and continue with helpful service.]''';
 
     switch (animationType) {
       case 'greeting':
-        debugPrint('🎭 [ANIMATION] Triggering greeting animation');
         _game?.onAIGreeting();
         break;
       case 'thinking':
-        debugPrint('🎭 [ANIMATION] Triggering thinking animation');
         _game?.onAIThinking();
         break;
       case 'positive':
-        debugPrint('🎭 [ANIMATION] Triggering positive feedback animation');
         _game?.onPositiveFeedback();
         break;
       case 'negative':
-        debugPrint('🎭 [ANIMATION] Triggering negative feedback animation');
         _game?.onNegativeFeedback();
         break;
       default:
-        debugPrint('🎭 [ANIMATION] Triggering stop speaking animation (idle)');
         _game?.onAIStopSpeaking();
         break;
     }
@@ -895,22 +844,8 @@ Provide positive reinforcement and continue with helpful service.]''';
 
   Future<void> _speakNPCResponse(String text) async {
     try {
-      debugPrint(
-        '🗣️  [SPEAK] Starting to speak NPC response: "${text.substring(0, text.length > 50 ? 50 : text.length)}..."',
-      );
-      debugPrint(
-        '🗣️  [SPEAK] Current animation state before speaking: $_currentAnimationState',
-      );
-
-      // Animation state is now handled by TTS callbacks
-      // onTTSStarted will trigger talking animation
-      // onTTSCompleted will trigger idle animation
       await _openaiService.speakNPCResponse(text);
-
-      debugPrint('🗣️  [SPEAK] NPC response speech initiated successfully');
     } catch (e) {
-      debugPrint('❌ [SPEAK] Error speaking NPC response: $e');
-      // On error, make sure we reset to idle
       _isWaiterSpeaking = false;
       _setWaiterAnimation('idle');
       notifyListeners();
@@ -942,16 +877,11 @@ Provide positive reinforcement and continue with helpful service.]''';
     notifyListeners();
   }
 
-  // Stop all speech
   Future<void> stopSpeaking() async {
-    debugPrint('🛑 [STOP] Stopping TTS and resetting animation');
     await _openaiService.stopSpeaking();
 
-    // Manually trigger the completion callback since stopping doesn't trigger it
     _isWaiterSpeaking = false;
-
-    // Force the animation to idle state when manually stopping
-    _currentAnimationState = 'idle'; // Direct assignment to bypass blocking
+    _currentAnimationState = 'idle';
     _game?.onAIStopSpeaking();
 
     notifyListeners();

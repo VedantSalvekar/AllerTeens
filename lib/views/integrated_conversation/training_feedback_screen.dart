@@ -87,11 +87,6 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Overall Score Card
-                              _buildOverallScoreCard(),
-
-                              const SizedBox(height: 24),
-
                               // Performance Overview
                               _buildPerformanceOverview(),
 
@@ -147,16 +142,22 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
       ),
       child: Row(
         children: [
-          // Score circle
+          // Score circle with color coding
           Container(
             width: 80,
             height: 80,
             decoration: BoxDecoration(
               color: AppColors.white,
               shape: BoxShape.circle,
+              border: Border.all(
+                color: _getScoreColor(widget.assessment.totalScore),
+                width: 3,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: _getScoreColor(
+                    widget.assessment.totalScore,
+                  ).withOpacity(0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
@@ -175,10 +176,10 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
                     ),
                   ),
                   Text(
-                    'Score',
+                    '/100',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: _getScoreColor(widget.assessment.totalScore),
                     ),
                   ),
                 ],
@@ -218,88 +219,6 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOverallScoreCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            _getGradeColor(widget.assessment.overallGrade),
-            _getGradeColor(widget.assessment.overallGrade).withOpacity(0.8),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: _getGradeColor(
-              widget.assessment.overallGrade,
-            ).withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Grade Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              widget.assessment.overallGrade,
-              style: TextStyle(
-                color: _getGradeColor(widget.assessment.overallGrade),
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Score
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '${widget.assessment.totalScore}',
-                style: const TextStyle(
-                  color: AppColors.white,
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Text(
-                '/100',
-                style: TextStyle(
-                  color: AppColors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            _getScoreMessage(widget.assessment.totalScore),
-            style: TextStyle(
-              color: AppColors.white.withOpacity(0.9),
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -475,17 +394,23 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
     );
   }
 
-  Widget _buildScoreCard(String title, int score, int maxScore, Color color) {
+  Widget _buildScoreCard(
+    String title,
+    int score,
+    int maxScore,
+    Color fallbackColor,
+  ) {
     final percentage = (score / maxScore).clamp(0.0, 1.0);
+    final dynamicColor = _getScoreColorForPercentage(percentage);
 
     return Column(
       children: [
-        Icon(Icons.analytics, color: color, size: 20),
+        Icon(Icons.analytics, color: dynamicColor, size: 20),
         const SizedBox(height: 8),
         Text(
           title,
           style: TextStyle(
-            color: color,
+            color: dynamicColor,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -495,7 +420,7 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
         Text(
           '$score/$maxScore',
           style: TextStyle(
-            color: color,
+            color: dynamicColor,
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
@@ -503,8 +428,8 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
         const SizedBox(height: 8),
         LinearProgressIndicator(
           value: percentage,
-          backgroundColor: color.withOpacity(0.2),
-          valueColor: AlwaysStoppedAnimation<Color>(color),
+          backgroundColor: dynamicColor.withOpacity(0.2),
+          valueColor: AlwaysStoppedAnimation<Color>(dynamicColor),
           minHeight: 4,
         ),
       ],
@@ -576,9 +501,10 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
     int score,
     int maxScore,
     String level,
-    Color color,
+    Color fallbackColor,
   ) {
     final percentage = (score / maxScore).clamp(0.0, 1.0);
+    final dynamicColor = _getScoreColorForPercentage(percentage);
 
     return Row(
       children: [
@@ -597,8 +523,8 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
           flex: 2,
           child: LinearProgressIndicator(
             value: percentage,
-            backgroundColor: color.withOpacity(0.2),
-            valueColor: AlwaysStoppedAnimation<Color>(color),
+            backgroundColor: dynamicColor.withOpacity(0.2),
+            valueColor: AlwaysStoppedAnimation<Color>(dynamicColor),
             minHeight: 6,
           ),
         ),
@@ -606,13 +532,13 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: dynamicColor.withOpacity(0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             level,
             style: TextStyle(
-              color: color,
+              color: dynamicColor,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -1122,20 +1048,26 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
   }
 
   Widget _buildActionButtons() {
-    return Column(
+    return Row(
       children: [
-        CustomButton(
-          text: 'Try Again',
-          onPressed: widget.onRetry,
-          backgroundColor: AppColors.primary,
-          textColor: AppColors.white,
+        Expanded(
+          child: CustomButton(
+            text: 'Try Again',
+            onPressed: widget.onRetry,
+            backgroundColor: AppColors.primary,
+            textColor: AppColors.white,
+            height: 44,
+          ),
         ),
-        const SizedBox(height: 16),
-        CustomButton(
-          text: 'Back to Home',
-          onPressed: widget.onBackToHome,
-          backgroundColor: AppColors.grey.withOpacity(0.2),
-          textColor: AppColors.textPrimary,
+        const SizedBox(width: 12),
+        Expanded(
+          child: CustomButton(
+            text: 'Back to Home',
+            onPressed: widget.onBackToHome,
+            backgroundColor: AppColors.grey.withOpacity(0.2),
+            textColor: AppColors.textPrimary,
+            height: 44,
+          ),
         ),
       ],
     );
@@ -1169,9 +1101,16 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
   }
 
   Color _getScoreColor(int score) {
-    if (score >= 90) return AppColors.success;
-    if (score >= 70) return AppColors.warning;
-    if (score >= 50) return AppColors.primary;
-    return AppColors.error;
+    if (score >= 90) return const Color(0xFF4CAF50); // Green - Excellent
+    if (score >= 70) return const Color(0xFF2196F3); // Blue - Good
+    if (score >= 50) return const Color(0xFFFF9800); // Orange - Average
+    return const Color(0xFFF44336); // Red - Poor
+  }
+
+  Color _getScoreColorForPercentage(double percentage) {
+    if (percentage >= 0.9) return const Color(0xFF4CAF50); // Green - Excellent
+    if (percentage >= 0.7) return const Color(0xFF2196F3); // Blue - Good
+    if (percentage >= 0.5) return const Color(0xFFFF9800); // Orange - Average
+    return const Color(0xFFF44336); // Red - Poor
   }
 }

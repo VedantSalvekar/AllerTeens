@@ -21,8 +21,6 @@ class InteractiveWaiterGame extends FlameGame {
   Future<void> onLoad() async {
     super.onLoad();
 
-    debugPrint('InteractiveWaiterGame: Screen size is ${size.x}x${size.y}');
-
     // Initialize camera
     camera.viewfinder.visibleGameSize = size;
 
@@ -43,27 +41,20 @@ class InteractiveWaiterGame extends FlameGame {
     waiter!.anchor = Anchor.center;
     add(waiter!);
 
-    debugPrint(
-      'InteractiveWaiterGame: Added waiter at position ${waiter!.position}',
-    );
-
     // Mark game as ready
     gameReady = true;
-    debugPrint('InteractiveWaiterGame: Game is now ready');
   }
 
   // Animation control methods called by AI conversation controller
 
   /// Called when AI starts greeting
   void onAIGreeting() {
-    debugPrint('InteractiveWaiterGame: AI greeting started');
     currentAnimationState = 'greeting';
     waiter?.playGreetingAnimation();
   }
 
   /// Called when AI is thinking/processing
   void onAIThinking() {
-    debugPrint('InteractiveWaiterGame: AI thinking');
     currentAnimationState = 'thinking';
     // For thinking, use static waiting animation (no movement)
     waiter?.playWaitingAnimation();
@@ -71,7 +62,6 @@ class InteractiveWaiterGame extends FlameGame {
 
   /// Called when AI starts speaking (triggered by TTS start event)
   void onAIStartSpeaking() {
-    debugPrint('InteractiveWaiterGame: AI started speaking (TTS event)');
     currentAnimationState = 'talking';
 
     // Stop any existing loop first
@@ -88,9 +78,6 @@ class InteractiveWaiterGame extends FlameGame {
 
   /// Called when AI stops speaking (triggered by TTS completion event)
   void onAIStopSpeaking() {
-    debugPrint(
-      'InteractiveWaiterGame: AI stopped speaking (TTS completion event)',
-    );
     currentAnimationState = 'idle';
 
     // Stop talking loop immediately
@@ -104,7 +91,6 @@ class InteractiveWaiterGame extends FlameGame {
 
   /// Called when AI gives positive feedback
   void onPositiveFeedback() {
-    debugPrint('InteractiveWaiterGame: Positive feedback animation');
     currentAnimationState = 'positive';
     waiter?.playPositiveReaction();
 
@@ -118,7 +104,6 @@ class InteractiveWaiterGame extends FlameGame {
 
   /// Called when AI gives negative/corrective feedback
   void onNegativeFeedback() {
-    debugPrint('InteractiveWaiterGame: Negative feedback animation');
     currentAnimationState = 'negative';
     waiter?.playNegativeReaction();
 
@@ -176,8 +161,6 @@ class InteractiveWaiterGame extends FlameGame {
 
   /// Called when waiter animation completes
   void _onWaiterAnimationComplete(String animationName) {
-    debugPrint('InteractiveWaiterGame: Animation completed: $animationName');
-
     // Handle specific animation completions
     switch (animationName) {
       case 'greeting':
@@ -194,8 +177,6 @@ class InteractiveWaiterGame extends FlameGame {
 
   /// Reset the game state
   void resetGame() {
-    debugPrint('InteractiveWaiterGame: Resetting game');
-
     _stopTalkingLoop();
     currentAnimationState = 'idle';
 

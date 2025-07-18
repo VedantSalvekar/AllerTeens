@@ -36,10 +36,6 @@ class WaiterCharacter extends SpriteAnimationComponent {
     // Set character size - dynamically sized to fill screen
     _setSizeBasedOnScreen();
 
-    debugPrint(
-      'WaiterCharacter: Loading at position $position with size $size',
-    );
-
     // Load the waiter spritesheet
     await _loadWaiterAnimations();
 
@@ -314,7 +310,6 @@ class WaiterCharacter extends SpriteAnimationComponent {
 
   /// Start talking animation - use this when AI begins speaking
   void startTalkingAnimation() {
-    debugPrint('WaiterCharacter: Starting talking animation');
     isTalking = true;
     isIdle = false;
     isWalking = false;
@@ -334,7 +329,6 @@ class WaiterCharacter extends SpriteAnimationComponent {
 
   /// Stop talking animation - use this when AI finishes speaking
   void stopTalkingAnimation() {
-    debugPrint('WaiterCharacter: Stopping talking animation');
     isTalking = false;
 
     // Store current position and scale to maintain consistency
@@ -412,8 +406,6 @@ class WaiterCharacter extends SpriteAnimationComponent {
     if (initialPosition != newInitialPosition || this.size != previousSize) {
       initialPosition = newInitialPosition;
       position = initialPosition.clone();
-
-      debugPrint('WaiterCharacter: Resized for screen ${size.x}x${size.y}');
     }
   }
 }

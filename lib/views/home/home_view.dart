@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../controllers/auth_controller.dart';
 import '../../models/scenario_models.dart';
-import '../../models/training_assessment.dart';
 import '../../data/scenario_data.dart';
 import '../../services/progress_tracking_service.dart';
-import '../auth/login_screen.dart';
 import '../integrated_conversation/integrated_conversation_screen.dart';
+import '../symptom_tracking/symptom_form_screen.dart';
+import '../symptom_tracking/logs_screen.dart';
 
 /// Home screen with custom navigation and greeting
 class HomeView extends ConsumerStatefulWidget {
@@ -101,113 +101,240 @@ class _HomeViewState extends ConsumerState<HomeView> {
   }
 
   Widget _buildHomePage(String firstName) {
-    return SafeArea(
-      child: Column(
-        children: [
-          // Custom App Bar with notification and profile icons
-          Padding(
-            padding: const EdgeInsets.all(AppConstants.defaultPadding),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // Notification icon
-                Container(
-                  width: 35,
-                  height: 35,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.transparent,
-                  ),
-                  child: Image.asset(
-                    'assets/icons/notification-02.png',
-                    width: 20,
-                    height: 20,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Profile icon
-                GestureDetector(
-                  onTap: () => _showProfileMenu(context),
-                  child: Container(
-                    width: 35,
-                    height: 35,
+    return Container(
+      color: AppColors.primary,
+      child: SafeArea(
+        child: Column(
+          children: [
+            // Custom App Bar with notification and profile icons
+            Container(
+              decoration: BoxDecoration(color: AppColors.primary),
+              padding: const EdgeInsets.all(AppConstants.defaultPadding),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // Notification icon
+                  Container(
+                    width: 28,
+                    height: 28,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.transparent,
                     ),
                     child: Image.asset(
-                      'assets/icons/Vector.png',
-                      width: 20,
-                      height: 20,
-                      color: AppColors.textPrimary,
+                      'assets/icons/notification-02.png',
+                      width: 16,
+                      height: 16,
+                      color: AppColors.white,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  // Profile icon
+                  GestureDetector(
+                    onTap: () => _showProfileMenu(context),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.transparent,
+                      ),
+                      child: Image.asset(
+                        'assets/icons/Vector.png',
+                        width: 16,
+                        height: 16,
+                        color: AppColors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Greeting Section
-          Expanded(
-            child: Container(
+            // Greeting Section with Teal Background
+            Container(
               width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                ),
+              ),
               padding: const EdgeInsets.only(
-                left: 12,
+                left: AppConstants.defaultPadding,
                 right: AppConstants.defaultPadding,
                 top: 20,
+                bottom: 32,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Greeting text
-                  Container(
-                    alignment: Alignment.centerLeft,
-                    child: RichText(
-                      textAlign: TextAlign.left,
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'Hey ',
-                            style: TextStyle(
-                              fontSize: 24,
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.normal,
-                            ),
+                  RichText(
+                    textAlign: TextAlign.left,
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Hey ',
+                          style: TextStyle(
+                            fontSize: 24,
+                            color: AppColors.white.withOpacity(0.9),
+                            fontWeight: FontWeight.normal,
                           ),
-                          TextSpan(
-                            text: '$firstName,',
-                            style: TextStyle(
-                              fontSize: 24,
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        ),
+                        TextSpan(
+                          text: '$firstName,',
+                          style: TextStyle(
+                            fontSize: 24,
+                            color: AppColors.white,
+                            fontWeight: FontWeight.w600,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 8),
                   // Subtitle
-                  Container(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Ready to take charge today?',
-                      textAlign: TextAlign.left,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.normal,
-                      ),
+                  Text(
+                    'Ready to take charge today?',
+                    textAlign: TextAlign.left,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppColors.white.withOpacity(0.8),
+                      fontWeight: FontWeight.normal,
                     ),
                   ),
-                  // Rest of the screen content can go here
-                  const Expanded(child: SizedBox()),
                 ],
               ),
             ),
-          ),
-        ],
+
+            // Content Section
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                color: AppColors.background,
+                padding: const EdgeInsets.only(top: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Track Symptoms Card with Teal Border
+                    Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: AppConstants.defaultPadding,
+                        vertical: AppConstants.smallPadding,
+                      ),
+                      child: Material(
+                        borderRadius: BorderRadius.circular(
+                          AppConstants.defaultBorderRadius,
+                        ),
+                        elevation: 2,
+                        shadowColor: AppColors.primary.withOpacity(0.1),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const SymptomFormScreen(),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(
+                            AppConstants.defaultBorderRadius,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.all(
+                              AppConstants.defaultPadding,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(
+                                AppConstants.defaultBorderRadius,
+                              ),
+                              border: Border.all(
+                                color: AppColors.primary.withOpacity(0.3),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                // Icon section
+                                Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(
+                                      AppConstants.smallBorderRadius,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '📋',
+                                      style: const TextStyle(fontSize: 32),
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(
+                                  width: AppConstants.defaultPadding,
+                                ),
+
+                                // Content section
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Track Symptoms',
+                                        style: AppTextStyles.headline3.copyWith(
+                                          color: AppColors.textPrimary,
+                                          fontSize: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Feeling okay today?',
+                                        style: AppTextStyles.bodyText2.copyWith(
+                                          color: AppColors.textSecondary
+                                              .withOpacity(0.7),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Arrow indicator
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: AppColors.primary,
+                                    size: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Rest of the screen content can go here
+                    const Expanded(child: SizedBox()),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -220,21 +347,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
   }
 
   Widget _buildLogPage() {
-    return SafeArea(
-      child: Container(
-        color: AppColors.background,
-        child: const Center(
-          child: Text(
-            'Training Logs',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-      ),
-    );
+    return const LogsScreen();
   }
 
   /// Build navigation item
@@ -975,7 +1088,6 @@ class _ScenarioSelectionContentState
         'masteredSkills': progress.masteredSkills,
       };
     } catch (e) {
-      debugPrint('Error getting scenario progress: $e');
       return _getMockProgress(scenarioId);
     }
   }
@@ -1143,38 +1255,67 @@ class _ScenarioSelectionContentState
                   Row(
                     children: [
                       Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(color: AppColors.textSecondary),
+                        child: SizedBox(
+                          height: 40,
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: TextButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                            ),
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    IntegratedConversationScreen(),
+                        child: SizedBox(
+                          height: 40,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      IntegratedConversationScreen(),
+                                ),
+                              ).then((_) {
+                                // Refresh progress data when returning from training
+                                refreshProgressData();
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: scenario.accentColor,
+                              foregroundColor: AppColors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                            ).then((_) {
-                              // Refresh progress data when returning from training
-                              refreshProgressData();
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: scenario.accentColor,
-                            foregroundColor: AppColors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                            ),
+                            child: const Text(
+                              'Start Training',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                          child: const Text('Start Training'),
                         ),
                       ),
                     ],
