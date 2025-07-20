@@ -18,6 +18,10 @@ class SymptomFormScreen extends ConsumerStatefulWidget {
 class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _notesController = TextEditingController();
+  final _foodEatenController = TextEditingController();
+  final _timeToFirstSymptomController = TextEditingController();
+  final _treatmentTimeController = TextEditingController();
+  final _medicationUsedController = TextEditingController();
 
   late DateTime _selectedDate;
   final Set<String> _selectedSymptoms = {};
@@ -35,6 +39,10 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
       final log = widget.existingLog!;
       _selectedSymptoms.addAll(log.symptoms);
       _notesController.text = log.notes;
+      _foodEatenController.text = log.foodEaten;
+      _timeToFirstSymptomController.text = log.timeToFirstSymptom;
+      _treatmentTimeController.text = log.treatmentTime;
+      _medicationUsedController.text = log.medicationUsed;
       _tookMedication = log.tookMedication;
       _severity = log.severity;
     }
@@ -43,6 +51,10 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
   @override
   void dispose() {
     _notesController.dispose();
+    _foodEatenController.dispose();
+    _timeToFirstSymptomController.dispose();
+    _treatmentTimeController.dispose();
+    _medicationUsedController.dispose();
     super.dispose();
   }
 
@@ -52,7 +64,9 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          widget.existingLog != null ? 'Edit Symptom Log' : 'Track Symptoms',
+          widget.existingLog != null
+              ? 'Edit Accidental Exposure'
+              : 'Accidental Exposure',
           style: AppTextStyles.headline3.copyWith(color: AppColors.white),
         ),
         backgroundColor: AppColors.primary,
@@ -71,6 +85,11 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
 
               const SizedBox(height: AppConstants.largePadding),
 
+              // Food Eaten Section
+              _buildFoodEatenSection(),
+
+              const SizedBox(height: AppConstants.largePadding),
+
               // Symptoms Section
               _buildSymptomsSection(),
 
@@ -81,8 +100,18 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
 
               const SizedBox(height: AppConstants.largePadding),
 
-              // Medication Section
-              _buildMedicationSection(),
+              // Time from Eating to First Symptom Section
+              _buildTimeToFirstSymptomSection(),
+
+              const SizedBox(height: AppConstants.largePadding),
+
+              // Treatment Time Section
+              _buildTreatmentTimeSection(),
+
+              const SizedBox(height: AppConstants.largePadding),
+
+              // Medication Used Section
+              _buildMedicationUsedSection(),
 
               const SizedBox(height: AppConstants.largePadding),
 
@@ -311,6 +340,195 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
     );
   }
 
+  Widget _buildFoodEatenSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Food Eaten',
+              style: AppTextStyles.headline3.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: AppConstants.smallPadding),
+
+            Text(
+              'What food did you eat that caused the reaction?',
+              style: AppTextStyles.bodyText2.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppConstants.defaultPadding),
+
+            TextFormField(
+              controller: _foodEatenController,
+              decoration: InputDecoration(
+                hintText: 'Enter the food that caused the reaction...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(
+                    AppConstants.defaultBorderRadius,
+                  ),
+                ),
+                filled: true,
+                fillColor: AppColors.surface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeToFirstSymptomSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Time to First Symptom',
+              style: AppTextStyles.headline3.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: AppConstants.smallPadding),
+
+            Text(
+              'How much time passed from eating to first symptom?',
+              style: AppTextStyles.bodyText2.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppConstants.defaultPadding),
+
+            QuickSelectField(
+              controller: _timeToFirstSymptomController,
+              hintText: 'e.g., 15 minutes, 2 hours...',
+              quickOptions: const [
+                '1 minute',
+                '2 minutes',
+                '5 minutes',
+                '10 minutes',
+                '15 minutes',
+                '30 minutes',
+                '45 minutes',
+                '1 hour',
+                '1.5 hours',
+                '2 hours',
+                '3 hours',
+                '4+ hours',
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTreatmentTimeSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Treatment Time',
+              style: AppTextStyles.headline3.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: AppConstants.smallPadding),
+
+            Text(
+              'When did you receive or take treatment?',
+              style: AppTextStyles.bodyText2.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppConstants.defaultPadding),
+
+            QuickSelectField(
+              controller: _treatmentTimeController,
+              hintText: 'e.g., 30 minutes after symptoms, immediately...',
+              quickOptions: const [
+                '1 minute',
+                '2 minutes',
+                '5 minutes',
+                '10 minutes',
+                '15 minutes',
+                '30 minutes',
+                '45 minutes',
+                '1 hour',
+                '1.5 hours',
+                '2 hours',
+                '3 hours',
+                '4+ hours',
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMedicationUsedSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Medication Used',
+              style: AppTextStyles.headline3.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: AppConstants.smallPadding),
+
+            Text(
+              'What medication did you take?',
+              style: AppTextStyles.bodyText2.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppConstants.defaultPadding),
+
+            QuickSelectField(
+              controller: _medicationUsedController,
+              hintText: 'e.g., Cetirizine, Loratadine, Piriton...',
+              quickOptions: const [
+                'Cetirizine (Zyrtec)',
+                'Loratadine (Claritin)',
+                'Fexofenadine (Allegra)',
+                'Chlorphenamine (Piriton)',
+                'Diphenhydramine (Benadryl)',
+                'Promethazine (Phenergan)',
+                'Desloratadine (Neoclarityn)',
+                'Levocetirizine (Xyzal)',
+                'No antihistamine taken',
+                'Other antihistamine',
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSubmitButton() {
     return SizedBox(
       width: double.infinity,
@@ -382,6 +600,10 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
         notes: _notesController.text.trim(),
         tookMedication: _tookMedication,
         severity: _severity,
+        foodEaten: _foodEatenController.text.trim(),
+        timeToFirstSymptom: _timeToFirstSymptomController.text.trim(),
+        treatmentTime: _treatmentTimeController.text.trim(),
+        medicationUsed: _medicationUsedController.text.trim(),
       );
 
       final controller = ref.read(symptomLogControllerProvider.notifier);
@@ -401,8 +623,8 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
             SnackBar(
               content: Text(
                 widget.existingLog != null
-                    ? 'Symptom log updated successfully!'
-                    : 'Symptom log saved successfully!',
+                    ? 'Accidental exposure updated successfully!'
+                    : 'Accidental exposure saved successfully!',
               ),
               backgroundColor: AppColors.success,
             ),
@@ -413,7 +635,9 @@ class _SymptomFormScreenState extends ConsumerState<SymptomFormScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to save symptom log. Please try again.'),
+              content: Text(
+                'Failed to save accidental exposure. Please try again.',
+              ),
               backgroundColor: AppColors.error,
             ),
           );
@@ -530,6 +754,151 @@ class SeveritySelector extends StatelessWidget {
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+/// Widget for input with dropdown quick selection and manual entry
+class QuickSelectField extends StatefulWidget {
+  final TextEditingController controller;
+  final String hintText;
+  final List<String> quickOptions;
+
+  const QuickSelectField({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    required this.quickOptions,
+  });
+
+  @override
+  State<QuickSelectField> createState() => _QuickSelectFieldState();
+}
+
+class _QuickSelectFieldState extends State<QuickSelectField> {
+  bool _showDropdown = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: widget.controller,
+                decoration: InputDecoration(
+                  hintText: widget.hintText,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                      AppConstants.defaultBorderRadius,
+                    ),
+                  ),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _showDropdown
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: AppColors.primary,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _showDropdown = !_showDropdown;
+                      });
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (_showDropdown) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(
+                AppConstants.defaultBorderRadius,
+              ),
+              border: Border.all(color: AppColors.lightGrey),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(
+                        AppConstants.defaultBorderRadius,
+                      ),
+                      topRight: Radius.circular(
+                        AppConstants.defaultBorderRadius,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        color: AppColors.primary,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Quick Select',
+                        style: AppTextStyles.bodyText2.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Wrap(
+                  children: widget.quickOptions.map((option) {
+                    return Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: InkWell(
+                        onTap: () {
+                          widget.controller.text = option;
+                          setState(() {
+                            _showDropdown = false;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Text(
+                            option,
+                            style: AppTextStyles.bodyText2.copyWith(
+                              color: AppColors.primary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -128,7 +128,7 @@ class QuickActionCard extends StatelessWidget {
   }
 }
 
-/// Specialized Track Symptoms Card
+/// Specialized Accidental Exposure Card
 class TrackSymptomsCard extends StatelessWidget {
   final VoidCallback onTap;
 
@@ -137,9 +137,9 @@ class TrackSymptomsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return QuickActionCard(
-      title: 'Track Symptoms',
-      subtitle: 'Feeling okay today?',
-      iconPath: '📋', // Clipboard emoji
+      title: 'Accidental Exposure',
+      subtitle: 'Log your exposure details',
+      iconPath: '⚠️', // Warning emoji
       onTap: onTap,
       backgroundColor: AppColors.surface,
     );

@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Model representing a daily symptom log entry
+/// Model representing a daily accidental exposure log entry
 class SymptomLog {
   final String id;
   final DateTime date;
@@ -8,6 +8,10 @@ class SymptomLog {
   final String notes;
   final bool tookMedication;
   final String severity;
+  final String foodEaten;
+  final String timeToFirstSymptom;
+  final String treatmentTime;
+  final String medicationUsed;
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -18,17 +22,25 @@ class SymptomLog {
     required this.notes,
     required this.tookMedication,
     required this.severity,
+    required this.foodEaten,
+    required this.timeToFirstSymptom,
+    required this.treatmentTime,
+    required this.medicationUsed,
     required this.createdAt,
     this.updatedAt,
   });
 
-  /// Create a new symptom log with current timestamp
+  /// Create a new accidental exposure log with current timestamp
   factory SymptomLog.create({
     required DateTime date,
     required List<String> symptoms,
     required String notes,
     required bool tookMedication,
     required String severity,
+    required String foodEaten,
+    required String timeToFirstSymptom,
+    required String treatmentTime,
+    required String medicationUsed,
   }) {
     final now = DateTime.now();
     return SymptomLog(
@@ -38,6 +50,10 @@ class SymptomLog {
       notes: notes,
       tookMedication: tookMedication,
       severity: severity,
+      foodEaten: foodEaten,
+      timeToFirstSymptom: timeToFirstSymptom,
+      treatmentTime: treatmentTime,
+      medicationUsed: medicationUsed,
       createdAt: now,
     );
   }
@@ -57,6 +73,10 @@ class SymptomLog {
       notes: data['notes'] ?? '',
       tookMedication: data['tookMedication'] ?? false,
       severity: data['severity'] ?? 'mild',
+      foodEaten: data['foodEaten'] ?? '',
+      timeToFirstSymptom: data['timeToFirstSymptom'] ?? '',
+      treatmentTime: data['treatmentTime'] ?? '',
+      medicationUsed: data['medicationUsed'] ?? '',
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       updatedAt: data['updatedAt'] != null
           ? (data['updatedAt'] as Timestamp).toDate()
@@ -72,6 +92,10 @@ class SymptomLog {
       'notes': notes,
       'tookMedication': tookMedication,
       'severity': severity,
+      'foodEaten': foodEaten,
+      'timeToFirstSymptom': timeToFirstSymptom,
+      'treatmentTime': treatmentTime,
+      'medicationUsed': medicationUsed,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
     };
@@ -85,6 +109,10 @@ class SymptomLog {
     String? notes,
     bool? tookMedication,
     String? severity,
+    String? foodEaten,
+    String? timeToFirstSymptom,
+    String? treatmentTime,
+    String? medicationUsed,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -95,6 +123,10 @@ class SymptomLog {
       notes: notes ?? this.notes,
       tookMedication: tookMedication ?? this.tookMedication,
       severity: severity ?? this.severity,
+      foodEaten: foodEaten ?? this.foodEaten,
+      timeToFirstSymptom: timeToFirstSymptom ?? this.timeToFirstSymptom,
+      treatmentTime: treatmentTime ?? this.treatmentTime,
+      medicationUsed: medicationUsed ?? this.medicationUsed,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

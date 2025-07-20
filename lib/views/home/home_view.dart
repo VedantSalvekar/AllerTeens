@@ -218,7 +218,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Track Symptoms Card with Teal Border
+                    // Accidental Exposure Card with Teal Border
                     Container(
                       margin: const EdgeInsets.symmetric(
                         horizontal: AppConstants.defaultPadding,
@@ -270,7 +270,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                   ),
                                   child: Center(
                                     child: Text(
-                                      '📋',
+                                      '⚠️',
                                       style: const TextStyle(fontSize: 32),
                                     ),
                                   ),
@@ -288,7 +288,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        'Track Symptoms',
+                                        'Accidental Exposure',
                                         style: AppTextStyles.headline3.copyWith(
                                           color: AppColors.textPrimary,
                                           fontSize: 18,
@@ -296,7 +296,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Feeling okay today?',
+                                        'Log your exposure details',
                                         style: AppTextStyles.bodyText2.copyWith(
                                           color: AppColors.textSecondary
                                               .withOpacity(0.7),

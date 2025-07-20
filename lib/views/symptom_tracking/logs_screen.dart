@@ -39,7 +39,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Symptom Logs',
+          'Exposure Logs',
           style: AppTextStyles.headline3.copyWith(color: AppColors.white),
         ),
         backgroundColor: AppColors.primary,
@@ -336,6 +336,16 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Food Eaten Card
+        if (log.foodEaten.isNotEmpty) ...[
+          SymptomLogCard(
+            title: 'Food Eaten',
+            icon: Icons.restaurant,
+            child: Text(log.foodEaten, style: AppTextStyles.bodyText1),
+          ),
+          const SizedBox(height: AppConstants.defaultPadding),
+        ],
+
         // Symptoms Card
         if (log.symptoms.isNotEmpty) ...[
           SymptomLogCard(
@@ -354,12 +364,35 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
         ),
         const SizedBox(height: AppConstants.defaultPadding),
 
-        // Medication Card
-        SymptomLogCard(
-          title: 'Medication',
-          icon: Icons.medication,
-          child: _buildMedicationDisplay(log.tookMedication),
-        ),
+        // Time to First Symptom Card
+        if (log.timeToFirstSymptom.isNotEmpty) ...[
+          SymptomLogCard(
+            title: 'Time to First Symptom',
+            icon: Icons.access_time,
+            child: Text(log.timeToFirstSymptom, style: AppTextStyles.bodyText1),
+          ),
+          const SizedBox(height: AppConstants.defaultPadding),
+        ],
+
+        // Treatment Time Card
+        if (log.treatmentTime.isNotEmpty) ...[
+          SymptomLogCard(
+            title: 'Treatment Time',
+            icon: Icons.schedule,
+            child: Text(log.treatmentTime, style: AppTextStyles.bodyText1),
+          ),
+          const SizedBox(height: AppConstants.defaultPadding),
+        ],
+
+        // Medication Used Card
+        if (log.medicationUsed.isNotEmpty) ...[
+          SymptomLogCard(
+            title: 'Medication Used',
+            icon: Icons.medication,
+            child: Text(log.medicationUsed, style: AppTextStyles.bodyText1),
+          ),
+          const SizedBox(height: AppConstants.defaultPadding),
+        ],
 
         // Notes Card
         if (log.notes.isNotEmpty) ...[
@@ -522,14 +555,14 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
               Icon(Icons.event_note, size: 64, color: AppColors.textSecondary),
               const SizedBox(height: 16),
               Text(
-                'No log for this day',
+                'No exposure logged',
                 style: AppTextStyles.headline3.copyWith(
                   color: AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Tap the + button to add a symptom log for this date',
+                'Tap the + button to log an accidental exposure for this date',
                 style: AppTextStyles.bodyText2,
                 textAlign: TextAlign.center,
               ),
@@ -545,7 +578,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
                   );
                 },
                 icon: const Icon(Icons.add),
-                label: const Text('Add Log'),
+                label: const Text('Log Exposure'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.white,
@@ -562,9 +595,9 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Log'),
+        title: const Text('Delete Exposure Log'),
         content: Text(
-          'Are you sure you want to delete the symptom log for ${DateFormat('MMM d, yyyy').format(log.date)}?',
+          'Are you sure you want to delete the exposure log for ${DateFormat('MMM d, yyyy').format(log.date)}?',
         ),
         actions: [
           TextButton(
@@ -582,14 +615,14 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
               if (success && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Symptom log deleted successfully'),
+                    content: Text('Exposure log deleted successfully'),
                     backgroundColor: AppColors.success,
                   ),
                 );
               } else if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Failed to delete symptom log'),
+                    content: Text('Failed to delete exposure log'),
                     backgroundColor: AppColors.error,
                   ),
                 );

@@ -56,6 +56,11 @@ dependencies:
   # Calendar and date utilities for symptom tracking
   table_calendar: ^3.0.9
   intl: ^0.19.0
+  # Notifications and reminders
+  flutter_local_notifications: ^17.2.2
+  android_alarm_manager_plus: ^4.0.3
+  # Permission handling
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
