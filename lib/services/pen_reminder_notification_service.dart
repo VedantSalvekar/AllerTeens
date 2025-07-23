@@ -1,7 +1,10 @@
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 
 /// Service for managing pen reminder notifications
 class PenReminderNotificationService {
@@ -25,14 +28,19 @@ class PenReminderNotificationService {
 
   /// Initialize the notification service
   Future<void> initialize() async {
+    // Initialize timezone data
+    tz.initializeTimeZones();
+
     // Request permissions
     await _requestPermissions();
 
     // Initialize local notifications
     await _initializeLocalNotifications();
 
-    // Initialize alarm manager
-    await AndroidAlarmManager.initialize();
+    // Initialize alarm manager (Android only)
+    if (Platform.isAndroid) {
+      await AndroidAlarmManager.initialize();
+    }
   }
 
   /// Request necessary permissions
@@ -146,20 +154,75 @@ class PenReminderNotificationService {
       'Scheduling daily pen reminder at $hour:${minute.toString().padLeft(2, '0')}',
     );
 
-    // Schedule with alarm manager for persistence across reboots
-    await AndroidAlarmManager.periodic(
-      const Duration(days: 1),
-      _notificationId,
-      _dailyReminderCallback,
-      startAt: DateTime.now().copyWith(
-        hour: hour,
-        minute: minute,
-        second: 0,
-        millisecond: 0,
+    if (Platform.isAndroid) {
+      // Android: Use alarm manager for persistence across reboots
+      await AndroidAlarmManager.periodic(
+        const Duration(days: 1),
+        _notificationId,
+        _dailyReminderCallback,
+        startAt: DateTime.now().copyWith(
+          hour: hour,
+          minute: minute,
+          second: 0,
+          millisecond: 0,
+        ),
+        exact: true,
+        wakeup: true,
+        rescheduleOnReboot: true,
+      );
+    } else if (Platform.isIOS) {
+      // iOS: Use flutter_local_notifications scheduling
+      await _scheduleIOSReminder(hour, minute);
+    }
+  }
+
+  /// Schedule iOS reminder using flutter_local_notifications
+  Future<void> _scheduleIOSReminder(int hour, int minute) async {
+    final now = DateTime.now();
+    var scheduledDate = DateTime(now.year, now.month, now.day, hour, minute);
+
+    // If the time has passed today, schedule for tomorrow
+    if (scheduledDate.isBefore(now)) {
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
+    }
+
+    const androidDetails = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+      styleInformation: BigTextStyleInformation(
+        'Quick check-in! Did you remember to bring your adrenaline pen today?',
       ),
-      exact: true,
-      wakeup: true,
-      rescheduleOnReboot: true,
+      ticker: 'Daily Pen Reminder',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      subtitle: 'Daily Check-in',
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    // Schedule the notification
+    await _notifications.zonedSchedule(
+      _notificationId,
+      '💉 Daily Pen Check!',
+      'Quick check-in! Did you remember to bring your adrenaline pen today?',
+      tz.TZDateTime.from(scheduledDate, tz.local),
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
@@ -206,7 +269,9 @@ class PenReminderNotificationService {
 
   /// Cancel daily reminder
   Future<void> cancelDailyReminder() async {
-    await AndroidAlarmManager.cancel(_notificationId);
+    if (Platform.isAndroid) {
+      await AndroidAlarmManager.cancel(_notificationId);
+    }
     await _notifications.cancel(_notificationId);
   }
 
@@ -239,6 +304,8 @@ class PenReminderNotificationService {
   /// Clear all notifications
   Future<void> clearAllNotifications() async {
     await _notifications.cancelAll();
-    await AndroidAlarmManager.cancel(_notificationId);
+    if (Platform.isAndroid) {
+      await AndroidAlarmManager.cancel(_notificationId);
+    }
   }
 }

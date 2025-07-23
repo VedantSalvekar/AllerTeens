@@ -4,7 +4,9 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../models/symptom_log.dart';
+import '../../models/pen_reminder_response.dart';
 import '../../controllers/symptom_log_controller.dart';
+import '../../controllers/pen_reminder_controller.dart';
 import 'symptom_form_screen.dart';
 
 class LogsScreen extends ConsumerStatefulWidget {
@@ -24,9 +26,10 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     super.initState();
     _selectedDay = DateTime.now();
 
-    // Load logs when screen is initialized
+    // Load logs and pen reminders when screen is initialized
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(symptomLogControllerProvider.notifier).loadLogs();
+      ref.read(penReminderControllerProvider.notifier).loadResponses();
     });
   }
 
@@ -34,6 +37,9 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(symptomLogStateProvider);
     final datesWithLogs = ref.watch(datesWithLogsProvider);
+    final reminderState = ref.watch(penReminderStateProvider);
+    final datesWithPenCarried = ref.watch(datesWithPenCarriedProvider);
+    final datesWithoutPenCarried = ref.watch(datesWithoutPenCarriedProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -50,6 +56,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               ref.read(symptomLogControllerProvider.notifier).loadLogs();
+              ref.read(penReminderControllerProvider.notifier).loadResponses();
             },
           ),
         ],
@@ -57,10 +64,14 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
       body: Column(
         children: [
           // Calendar Section
-          _buildCalendarSection(datesWithLogs),
+          _buildCalendarSection(
+            datesWithLogs,
+            datesWithPenCarried,
+            datesWithoutPenCarried,
+          ),
 
           // Selected Day Details
-          Expanded(child: _buildSelectedDayDetails(state)),
+          Expanded(child: _buildSelectedDayDetails(state, reminderState)),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -80,7 +91,11 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     );
   }
 
-  Widget _buildCalendarSection(List<DateTime> datesWithLogs) {
+  Widget _buildCalendarSection(
+    List<DateTime> datesWithLogs,
+    List<DateTime> datesWithPenCarried,
+    List<DateTime> datesWithoutPenCarried,
+  ) {
     return Container(
       color: AppColors.surface,
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
@@ -144,15 +159,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
         ),
         calendarBuilders: CalendarBuilders(
           markerBuilder: (context, day, events) {
-            if (events.isNotEmpty) {
-              final log = events.first as SymptomLog;
-              return Positioned(
-                right: 2,
-                bottom: 2,
-                child: _buildEventMarker(log),
-              );
-            }
-            return null;
+            return _buildMultipleMarkers(day, events);
           },
           todayBuilder: (context, day, focusedDay) {
             return Container(
@@ -235,7 +242,64 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     );
   }
 
-  Widget _buildSelectedDayDetails(SymptomLogState state) {
+  Widget _buildPenReminderMarker(bool penCarried) {
+    final markerColor = penCarried ? Colors.green : Colors.red;
+    final markerIcon = penCarried ? Icons.check : Icons.close;
+
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        color: markerColor,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: markerColor.withOpacity(0.3),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Icon(markerIcon, size: 10, color: Colors.white),
+    );
+  }
+
+  Widget? _buildMultipleMarkers(DateTime day, List<SymptomLog> events) {
+    final hasSymptomLog = events.isNotEmpty;
+    final penReminderResponse = ref
+        .read(penReminderControllerProvider.notifier)
+        .getResponseForDate(day);
+
+    if (!hasSymptomLog && penReminderResponse == null) {
+      return null;
+    }
+
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          // Symptom log marker (bottom right)
+          if (hasSymptomLog)
+            Positioned(
+              right: 2,
+              bottom: 2,
+              child: _buildEventMarker(events.first),
+            ),
+          // Pen reminder marker (top left)
+          if (penReminderResponse != null)
+            Positioned(
+              left: 2,
+              top: 2,
+              child: _buildPenReminderMarker(penReminderResponse.penCarried),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedDayDetails(
+    SymptomLogState state,
+    PenReminderState reminderState,
+  ) {
     if (state.isLoading) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.primary),
@@ -281,6 +345,7 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
     }
 
     final selectedLog = state.getLogForDate(_selectedDay!);
+    final penReminderResponse = reminderState.getResponseForDate(_selectedDay!);
     final formattedDate = DateFormat('EEEE, MMM d, yyyy').format(_selectedDay!);
 
     return SingleChildScrollView(
@@ -293,11 +358,19 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
 
           const SizedBox(height: AppConstants.defaultPadding),
 
+          // Pen Reminder Section
+          if (penReminderResponse != null) ...[
+            _buildPenReminderSection(penReminderResponse),
+            const SizedBox(height: AppConstants.defaultPadding),
+          ],
+
           // Log Details or Empty State
           if (selectedLog != null)
             _buildLogDetails(selectedLog)
+          else if (penReminderResponse == null)
+            _buildEmptyState()
           else
-            _buildEmptyState(),
+            _buildOnlyPenReminderState(),
         ],
       ),
     );
@@ -636,6 +709,141 @@ class _LogsScreenState extends ConsumerState<LogsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPenReminderSection(PenReminderResponse response) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppConstants.defaultPadding),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+        border: Border.all(
+          color: response.penCarried ? Colors.green : Colors.red,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (response.penCarried ? Colors.green : Colors.red)
+                .withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.medication,
+                color: response.penCarried ? Colors.green : Colors.red,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Adrenaline Pen Check',
+                style: AppTextStyles.headline3.copyWith(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: response.penCarried ? Colors.green : Colors.red,
+                  borderRadius: BorderRadius.circular(
+                    AppConstants.smallBorderRadius,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      response.penCarried ? Icons.check : Icons.close,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      response.penCarried ? 'Carried' : 'Forgot',
+                      style: AppTextStyles.bodyText2.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Responded at ${DateFormat('h:mm a').format(response.respondedAt)}',
+                style: AppTextStyles.bodyText2.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOnlyPenReminderState() {
+    return Column(
+      children: [
+        const SizedBox(height: AppConstants.largePadding),
+        Icon(
+          Icons.medical_services_outlined,
+          size: 64,
+          color: AppColors.textSecondary,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'No exposure incidents recorded',
+          style: AppTextStyles.headline3.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'But you did check in about your adrenaline pen!',
+          style: AppTextStyles.bodyText2.copyWith(
+            color: AppColors.textSecondary,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppConstants.largePadding),
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => SymptomFormScreen(
+                  selectedDate: _selectedDay ?? DateTime.now(),
+                ),
+              ),
+            );
+          },
+          icon: const Icon(Icons.add),
+          label: const Text('Log Exposure'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -61,6 +61,9 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       // Listen to auth state changes
       _authService.authStateChanges.listen((User? user) async {
+        print(
+          '🔄 [AUTH_CONTROLLER] Auth state changed: ${user?.email ?? 'null'}',
+        );
         if (user != null) {
           // Get user model from Firestore with retry logic
           UserModel? userModel = await _authService.getCurrentUserModel();
@@ -93,12 +96,14 @@ class AuthController extends StateNotifier<AuthState> {
             isInitialized: true,
           );
         } else {
+          print('🔄 [AUTH_CONTROLLER] User signed out, updating state...');
           state = state.copyWith(
             user: null,
             isLoading: false,
             error: null,
             isInitialized: true,
           );
+          print('✅ [AUTH_CONTROLLER] State updated for logout');
         }
       });
     } catch (e) {
@@ -245,8 +250,14 @@ class AuthController extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
+      print('🔵 [AUTH] Calling auth service sign out...');
       await _authService.signOut();
-      state = state.copyWith(user: null, isLoading: false, error: null);
+      state = state.copyWith(
+        error: null,
+        isLoading: false,
+        user: null,
+        isInitialized: true,
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Failed to sign out: $e');
     }

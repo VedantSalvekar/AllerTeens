@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../controllers/auth_controller.dart';
+import '../../controllers/pen_reminder_controller.dart';
 import '../../models/scenario_models.dart';
 import '../../data/scenario_data.dart';
 import '../../services/progress_tracking_service.dart';
 import '../integrated_conversation/integrated_conversation_screen.dart';
 import '../symptom_tracking/symptom_form_screen.dart';
 import '../symptom_tracking/logs_screen.dart';
+import '../pen_reminder/pen_reminder_dialog.dart';
 
 /// Home screen with custom navigation and greeting
 class HomeView extends ConsumerStatefulWidget {
@@ -21,6 +23,24 @@ class _HomeViewState extends ConsumerState<HomeView> {
   int _selectedIndex = 0;
   final GlobalKey<_ScenarioSelectionContentState> _scenarioContentKey =
       GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize pen reminders when home screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializePenReminders();
+    });
+  }
+
+  /// Initialize pen reminder system for authenticated user
+  Future<void> _initializePenReminders() async {
+    try {
+      await ref.read(penReminderControllerProvider.notifier).initialize();
+    } catch (e) {
+      print('Failed to initialize pen reminders: $e');
+    }
+  }
 
   // Method to refresh progress data (can be called externally)
   void refreshProgressData() {
@@ -114,20 +134,24 @@ class _HomeViewState extends ConsumerState<HomeView> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   // Notification icon
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.transparent,
-                    ),
-                    child: Image.asset(
-                      'assets/icons/notification-02.png',
-                      width: 16,
-                      height: 16,
-                      color: AppColors.white,
+                  GestureDetector(
+                    onTap: () => _showPenReminderDialog(context),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.transparent,
+                      ),
+                      child: Image.asset(
+                        'assets/icons/notification-02.png',
+                        width: 16,
+                        height: 16,
+                        color: AppColors.white,
+                      ),
                     ),
                   ),
+
                   const SizedBox(width: 12),
                   // Profile icon
                   GestureDetector(
@@ -406,6 +430,15 @@ class _HomeViewState extends ConsumerState<HomeView> {
     );
   }
 
+  /// Show pen reminder dialog for testing
+  void _showPenReminderDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const PenReminderDialog(),
+    );
+  }
+
   /// Show profile menu
   void _showProfileMenu(BuildContext context) {
     showModalBottomSheet(
@@ -451,10 +484,10 @@ class _HomeViewState extends ConsumerState<HomeView> {
             ListTile(
               leading: const Icon(Icons.logout, color: AppColors.error),
               title: const Text('Logout'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
                 // Sign out and let auth state listener handle navigation
-                ref.read(authControllerProvider.notifier).signOut();
+                await ref.read(authControllerProvider.notifier).signOut();
               },
             ),
           ],

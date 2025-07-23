@@ -5,7 +5,7 @@ import '../../controllers/allergy_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../shared/widgets/allergen_tag.dart';
 import '../../core/constants.dart';
-import '../home/home_view.dart';
+import 'medical_info_screen.dart';
 
 /// Allergy Selection Screen for AllerWise
 ///
@@ -320,22 +320,15 @@ class _AllergySelectionScreenState
     );
   }
 
-  /// Handle skip button press
   void _handleSkipPressed(BuildContext context) {
-    print('⏭️ [ALLERGY_SCREEN] Skip button pressed');
     _navigateToHome(context);
   }
 
-  /// Handle continue button press
   Future<void> _handleContinuePressed(BuildContext context) async {
-    print('▶️ [ALLERGY_SCREEN] Continue button pressed');
-
     final allergyController = ref.read(allergyControllerProvider.notifier);
     final allergyState = ref.read(allergyControllerProvider);
 
-    // Check if already loading
     if (allergyState.isLoading) {
-      print('⚠️ [ALLERGY_SCREEN] Already processing, ignoring button press');
       return;
     }
 
@@ -343,7 +336,6 @@ class _AllergySelectionScreenState
       final success = await allergyController.saveSelectedAllergens();
 
       if (success) {
-        print('✅ [ALLERGY_SCREEN] Allergens saved successfully');
         _navigateToHome(context);
       } else {
         print('❌ [ALLERGY_SCREEN] Failed to save allergens');
@@ -360,11 +352,10 @@ class _AllergySelectionScreenState
     }
   }
 
-  /// Navigate to home screen
+  /// Navigate to medical info screen
   void _navigateToHome(BuildContext context) {
-    print('🏠 [ALLERGY_SCREEN] Navigating to home');
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const HomeView()),
+      MaterialPageRoute(builder: (context) => const MedicalInfoScreen()),
       (route) => false,
     );
   }

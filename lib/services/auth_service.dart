@@ -230,7 +230,11 @@ class AuthService {
 
   /// Sign out
   Future<void> signOut() async {
-    await Future.wait([_auth.signOut(), _googleSignIn.signOut()]);
+    try {
+      await Future.wait([_auth.signOut(), _googleSignIn.signOut()]);
+    } catch (e) {
+      rethrow;
+    }
   }
 
   /// Send password reset email
