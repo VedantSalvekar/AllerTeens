@@ -1,0 +1,24 @@
+{
+  "id": "restaurant_beginner",
+  "npcRole": "waiter",
+  "scenarioContext": "You're dining at a casual restaurant and need to place an order while keeping your allergies in mind.",
+  "backgroundImagePath": "assets/images/backgrounds/restaurant_interior.png",
+  "initialDialogue": "Hi there! Welcome in. What can I get started for you today?",
+  "responses": [],
+  "enableAIDialogue": true,
+  "allergyTips": [
+    "Always disclose allergies before ordering.",
+    "Avoid dishes that may contain hidden allergens like sauces or dressings.",
+    "Don’t assume the waiter knows your allergy unless you say it clearly."
+  ],
+  "positiveReinforcements": [
+    "Thanks for letting me know about your allergy. I’ll make sure we prepare it safely!",
+    "Good call mentioning that — I’ll double check the ingredients for you.",
+    "Appreciate the heads-up. We take allergies seriously here."
+  ],
+  "gentlePrompts": [
+    "Would you like to share any food preferences or restrictions before I make a suggestion?",
+    "Let me know if there’s anything we should avoid for you.",
+    "Any dietary needs I should be aware of before we proceed?"
+  ]
+}

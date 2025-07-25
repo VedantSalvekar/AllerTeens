@@ -6,6 +6,9 @@ import '../models/training_assessment.dart';
 import '../models/game_state.dart';
 import '../core/config/app_config.dart';
 import 'openai_dialogue_service.dart';
+import '../models/scenario_models.dart';
+import '../models/user_model.dart';
+import 'menu_service.dart';
 
 /// Advanced assessment engine that analyzes AI conversations for training effectiveness
 class AssessmentEngine {
@@ -18,19 +21,36 @@ class AssessmentEngine {
     required String scenarioId,
     required DateTime sessionStart,
     required DateTime sessionEnd,
-    ConversationContext? conversationContext,
+    required ConversationContext conversationContext,
   }) async {
     try {
-      // BEGINNER ASSESSMENT - Focus on key skills:
+      // ENHANCED BEGINNER ASSESSMENT - Focus on key skills:
       // 1. Did they mention their allergies? (0-70 points)
       // 2. Did they order safe food? (0-30 points)
-      // 3. Penalty for unsafe orders (-30 points)
+      // 3. Did they ask about ingredients? (+5 bonus points)
+      // 4. Penalty for unsafe orders (-30 points)
+      // 5. Partial credit for correcting unsafe orders
 
       bool mentionedAllergies = false;
       bool orderedSafeFood = false;
       bool orderedUnsafeFood = false;
+      bool askedAboutIngredients = false;
+      bool correctedUnsafeOrder = false;
       String? selectedDish;
       List<String> unsafeAllergens = [];
+
+      // Load menu for enhanced safety checking
+      await MenuService.instance.loadMenu();
+
+      // Allergy disclosure detection: check all turns and context
+      final allergyDisclosed =
+          conversationContext.allergiesDisclosed ||
+          conversationTurns.any(
+            (turn) =>
+                turn.detectedAllergies.isNotEmpty ||
+                (turn.userInput.toLowerCase().contains('allergy') ||
+                    turn.userInput.toLowerCase().contains('allergic')),
+          );
 
       // FIXED: Use conversation context state if available, otherwise fall back to text analysis
       if (conversationContext != null) {
@@ -38,28 +58,103 @@ class AssessmentEngine {
         mentionedAllergies = conversationContext.allergiesDisclosed;
         selectedDish = conversationContext.selectedDish;
 
-        // Check if selected dish is safe based on known allergens
+        // Enhanced safety checking using MenuService
         if (selectedDish != null) {
-          final dishAllergens = _getDishAllergens(selectedDish);
-          final userAllergens = playerProfile.allergies
-              .map((a) => a.toLowerCase())
-              .toSet();
+          final menuItem = MenuService.instance.findItemByName(selectedDish);
+          if (menuItem != null) {
+            final isSafe = MenuService.instance.isItemSafeForUser(
+              menuItem,
+              playerProfile.allergies,
+            );
 
-          // Check if dish contains any user allergens
-          bool containsUserAllergens = false;
-          for (final allergen in dishAllergens) {
-            if (userAllergens.contains(allergen.toLowerCase())) {
-              containsUserAllergens = true;
-              unsafeAllergens.add(allergen);
+            if (isSafe) {
+              orderedSafeFood = true;
+            } else {
+              orderedUnsafeFood = true;
+              // Get specific allergens that make it unsafe
+              final allAllergens = [
+                ...menuItem.allergens,
+                ...menuItem.hiddenAllergens,
+              ];
+              for (final allergen in allAllergens) {
+                for (final userAllergy in playerProfile.allergies) {
+                  if (allergen.toLowerCase().contains(
+                        userAllergy.toLowerCase(),
+                      ) ||
+                      userAllergy.toLowerCase().contains(
+                        allergen.toLowerCase(),
+                      )) {
+                    unsafeAllergens.add(allergen);
+                  }
+                }
+              }
+            }
+          } else {
+            // Fallback to old method if menu item not found
+            final dishAllergens = _getDishAllergens(selectedDish);
+            final userAllergens = playerProfile.allergies
+                .map((a) => _normalizeAllergen(a.toLowerCase()))
+                .toSet();
+
+            bool containsUserAllergens = false;
+            for (final allergen in dishAllergens) {
+              if (userAllergens.contains(
+                _normalizeAllergen(allergen.toLowerCase()),
+              )) {
+                containsUserAllergens = true;
+                unsafeAllergens.add(allergen);
+              }
+            }
+
+            if (containsUserAllergens) {
+              orderedUnsafeFood = true;
+              orderedSafeFood = false;
+            } else {
+              orderedSafeFood = true;
             }
           }
+        }
 
-          if (containsUserAllergens) {
-            orderedUnsafeFood = true;
-            orderedSafeFood = false;
-          } else {
-            orderedSafeFood = true;
-            orderedUnsafeFood = false;
+        // Check if user asked about ingredients
+        for (final turn in conversationTurns) {
+          final userInput = turn.userInput.toLowerCase();
+          if (userInput.contains('ingredient') ||
+              userInput.contains('contain') ||
+              userInput.contains('made with') ||
+              userInput.contains('what\'s in') ||
+              userInput.contains('what is in') ||
+              userInput.contains('does it have') ||
+              userInput.contains('is there') ||
+              userInput.contains('any ') &&
+                  (userInput.contains('allergen') ||
+                      userInput.contains('dairy') ||
+                      userInput.contains('egg') ||
+                      userInput.contains('nut') ||
+                      userInput.contains('fish'))) {
+            askedAboutIngredients = true;
+            break;
+          }
+        }
+
+        // Check for order correction (if they initially ordered unsafe, then changed)
+        String? firstOrder;
+        String? finalOrder;
+        for (final turn in conversationTurns) {
+          final userInput = turn.userInput.toLowerCase();
+          if ((userInput.contains('i\'ll have') ||
+                  userInput.contains('i want') ||
+                  userInput.contains('i\'d like')) &&
+              firstOrder == null) {
+            firstOrder = selectedDish;
+          } else if ((userInput.contains('actually') ||
+                  userInput.contains('instead') ||
+                  userInput.contains('change') ||
+                  userInput.contains('different')) &&
+              (userInput.contains('i\'ll have') ||
+                  userInput.contains('i want'))) {
+            finalOrder = selectedDish;
+            correctedUnsafeOrder = true;
+            break;
           }
         }
       } else {
@@ -150,12 +245,24 @@ class AssessmentEngine {
         }
       }
 
-      // Calculate scores with penalty system
+      // Enhanced scoring system
       final allergyScore = mentionedAllergies ? 70 : 0;
       final safetyScore = orderedSafeFood ? 30 : 0;
-      final unsafeOrderPenalty = orderedUnsafeFood ? -30 : 0;
-      final totalScore = (allergyScore + safetyScore + unsafeOrderPenalty)
-          .clamp(0, 100);
+      final ingredientBonus = askedAboutIngredients ? 5 : 0;
+      final correctionCredit = correctedUnsafeOrder
+          ? 10
+          : 0; // Partial credit for correction
+      final unsafeOrderPenalty = orderedUnsafeFood && !correctedUnsafeOrder
+          ? -30
+          : 0;
+
+      final totalScore =
+          (allergyScore +
+                  safetyScore +
+                  ingredientBonus +
+                  correctionCredit +
+                  unsafeOrderPenalty)
+              .clamp(0, 100);
 
       // Generate feedback
       final strengths = <String>[];
@@ -170,28 +277,46 @@ class AssessmentEngine {
       if (orderedSafeFood) {
         strengths.add('Ordered safe food');
       } else if (orderedUnsafeFood) {
-        improvements.add(
-          'Ordered food containing your allergens (${unsafeAllergens.join(', ')})',
-        );
-        improvements.add('Always check ingredients before ordering');
+        if (correctedUnsafeOrder) {
+          strengths.add('Corrected unsafe order after waiter warning');
+          improvements.add(
+            'Try to ask about ingredients before ordering to avoid unsafe choices',
+          );
+        } else {
+          improvements.add(
+            'Ordered food containing your allergens (${unsafeAllergens.join(', ')})',
+          );
+          improvements.add('Always check ingredients before ordering');
+        }
       } else {
         improvements.add('Ask about ingredients before ordering');
       }
 
+      if (askedAboutIngredients) {
+        strengths.add('Asked about ingredients');
+      } else if (orderedSafeFood && !mentionedAllergies) {
+        improvements.add(
+          'Ask about ingredients even for seemingly safe dishes',
+        );
+      }
+
       String feedback;
 
-      if (orderedUnsafeFood) {
+      if (orderedUnsafeFood && !correctedUnsafeOrder) {
         feedback =
             'SAFETY CONCERN: You ordered $selectedDish which contains ${unsafeAllergens.join(' and ')}, but you\'re allergic to ${unsafeAllergens.join(' and ')}! ${mentionedAllergies ? 'Even though you mentioned your allergies, ' : ''}always make sure to avoid foods with your allergens.';
       } else if (totalScore >= 90) {
         feedback =
-            'Excellent! You communicated your allergies clearly and ordered safely.';
+            'Excellent! You communicated your allergies clearly and ordered safely. ${askedAboutIngredients ? 'Great job asking about ingredients!' : ''}';
       } else if (totalScore >= 70) {
         feedback =
-            'Good job! You mentioned your allergies. ${orderedSafeFood ? 'Great choice ordering safe food!' : 'Next time, make sure to verify your order is safe.'}';
+            'Good job! You mentioned your allergies. ${orderedSafeFood ? 'Great choice ordering safe food!' : 'Next time, make sure to verify your order is safe.'} ${askedAboutIngredients ? 'Asking about ingredients shows good safety awareness.' : 'Consider asking about ingredients to be extra safe.'}';
+      } else if (correctedUnsafeOrder) {
+        feedback =
+            'Good recovery! You listened to the waiter\'s warning and changed your order to something safe. Next time, try asking about ingredients before ordering to avoid this situation.';
       } else if (totalScore >= 30) {
         feedback =
-            'You ordered food, but remember to always mention your allergies first!';
+            'You ordered food, but remember to always mention your allergies first! ${askedAboutIngredients ? 'Good job asking about ingredients.' : 'Also ask about ingredients to ensure safety.'}';
       } else {
         feedback =
             'Keep practicing! Remember to mention your allergies and ask about safe options.';
@@ -732,9 +857,76 @@ Respond with JSON only:
       'Chocolate Brownie': ['Dairy', 'Egg', 'Tree Nuts', 'Gluten'],
       'Grilled Chicken': [], // Generally safe
       'Tomato Soup': ['Dairy', 'Gluten'],
+      // ✅ REALISTIC: Handle flexible dish names
+      'Vegetarian Pasta': ['Gluten'], // May contain dairy depending on sauce
+      'Chicken Dish': [], // Generally safe
+      'Pasta': ['Gluten'], // Basic pasta
+      'Pizza': ['Gluten', 'Dairy'], // Basic pizza
+      'Salad': [], // Basic salad, generally safe
+      'Soup': ['Dairy'], // Most soups contain dairy
+      'Fish': ['Fish'], // Any fish dish
+      'Beef': [], // Generally safe
+      'Pork': [], // Generally safe
+      'Burger': ['Gluten', 'Dairy'], // Typical burger
+      'Sandwich': ['Gluten'], // Bread-based
+      'Rice': [], // Generally safe
+      'Noodles': ['Gluten'], // Wheat-based noodles
+      'Curry': [], // Generally safe unless specified
+      'Steak': [], // Generally safe
+      'Salmon': ['Fish'], // Fish dish
+      'Tuna': ['Fish'], // Fish dish
+      'Cheese': ['Dairy'], // Cheese-based dishes
+      'Bread': ['Gluten'], // Bread products
+      'Fries': [], // Generally safe
+      'Chips': [], // Generally safe
+      'Brownie': ['Dairy', 'Egg', 'Tree Nuts', 'Gluten'],
+      'Cake': ['Dairy', 'Egg', 'Gluten'],
+      'Ice Cream': ['Dairy'],
     };
 
-    return dishAllergens[dishName] ?? [];
+    // ✅ FLEXIBLE: Try exact match first, then partial matches
+    if (dishAllergens.containsKey(dishName)) {
+      return dishAllergens[dishName]!;
+    }
+
+    // Try partial matches for flexible dish names
+    final lowerDish = dishName.toLowerCase();
+    for (final entry in dishAllergens.entries) {
+      final lowerKey = entry.key.toLowerCase();
+      if (lowerDish.contains(lowerKey) || lowerKey.contains(lowerDish)) {
+        return entry.value;
+      }
+    }
+
+    // Check for specific allergen words in dish name
+    final allergenWords = {
+      'fish': ['Fish'],
+      'salmon': ['Fish'],
+      'tuna': ['Fish'],
+      'cheese': ['Dairy'],
+      'milk': ['Dairy'],
+      'cream': ['Dairy'],
+      'butter': ['Dairy'],
+      'egg': ['Egg'],
+      'peanut': ['Peanut'],
+      'nut': ['Tree Nuts'],
+      'almond': ['Tree Nuts'],
+      'walnut': ['Tree Nuts'],
+      'bread': ['Gluten'],
+      'pasta': ['Gluten'],
+      'noodle': ['Gluten'],
+      'pizza': ['Gluten', 'Dairy'],
+      'wheat': ['Gluten'],
+    };
+
+    List<String> detectedAllergens = [];
+    for (final entry in allergenWords.entries) {
+      if (lowerDish.contains(entry.key)) {
+        detectedAllergens.addAll(entry.value);
+      }
+    }
+
+    return detectedAllergens.toSet().toList(); // Remove duplicates
   }
 
   /// Check if user is actually disclosing allergies vs ordering food
@@ -937,5 +1129,29 @@ Respond with JSON only:
     }
 
     return result;
+  }
+
+  /// Normalize allergen names to handle plural forms and variations
+  String _normalizeAllergen(String allergen) {
+    final normalized = allergen.toLowerCase().trim();
+
+    // Handle plural forms
+    final pluralMappings = {
+      'peanuts': 'peanut',
+      'nuts': 'nut',
+      'eggs': 'egg',
+      'fish': 'fish', // Already singular
+      'dairy': 'dairy', // Already singular
+      'milk': 'dairy', // Map milk to dairy
+      'gluten': 'gluten', // Already singular
+      'wheat': 'gluten', // Map wheat to gluten
+      'tree nuts': 'tree nut',
+      'tree nut': 'tree nut',
+      'shellfish': 'shellfish',
+      'soy': 'soy',
+      'sesame': 'sesame',
+    };
+
+    return pluralMappings[normalized] ?? normalized;
   }
 }

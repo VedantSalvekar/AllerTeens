@@ -94,6 +94,8 @@ flutter:
     - assets/icons/
     - assets/fonts/
     - assets/audio/
+    - assets/data/
+    - assets/data/scenarios/restaurant_beginner.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

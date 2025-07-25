@@ -6,6 +6,7 @@ import '../../controllers/pen_reminder_controller.dart';
 import '../../models/scenario_models.dart';
 import '../../data/scenario_data.dart';
 import '../../services/progress_tracking_service.dart';
+import '../../services/menu_service.dart';
 import '../integrated_conversation/integrated_conversation_screen.dart';
 import '../symptom_tracking/symptom_form_screen.dart';
 import '../symptom_tracking/logs_screen.dart';
@@ -1197,6 +1198,93 @@ class _ScenarioSelectionContentState
     );
   }
 
+  Future<void> _showMenuDialog(
+    BuildContext context,
+    TrainingScenario scenario,
+  ) async {
+    try {
+      // Load menu data
+      final menu = await MenuService.instance.loadMenu();
+      final menuText = MenuService.instance.formatMenuForDisplay();
+
+      if (!context.mounted) return;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.restaurant_menu, color: scenario.accentColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${menu.restaurantName} Menu',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: scenario.accentColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Container(
+            width: double.maxFinite,
+            constraints: const BoxConstraints(maxHeight: 400),
+            child: SingleChildScrollView(
+              child: Text(
+                menuText,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Back'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context); // Close menu dialog
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => IntegratedConversationScreen(),
+                  ),
+                ).then((_) {
+                  // Refresh progress data when returning from training
+                  refreshProgressData();
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: scenario.accentColor,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Start Training'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      // Fallback if menu loading fails
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => IntegratedConversationScreen(),
+          ),
+        ).then((_) {
+          refreshProgressData();
+        });
+      }
+    }
+  }
+
   Widget _buildScenarioDetailsDialog(TrainingScenario scenario) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -1317,18 +1405,9 @@ class _ScenarioSelectionContentState
                         child: SizedBox(
                           height: 40,
                           child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      IntegratedConversationScreen(),
-                                ),
-                              ).then((_) {
-                                // Refresh progress data when returning from training
-                                refreshProgressData();
-                              });
+                            onPressed: () async {
+                              Navigator.pop(context); // Close scenario dialog
+                              await _showMenuDialog(context, scenario);
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: scenario.accentColor,

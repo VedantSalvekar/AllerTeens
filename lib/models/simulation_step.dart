@@ -40,23 +40,30 @@ class SimulationStep {
       scenarioContext ?? 'A conversation about food and dining';
 
   factory SimulationStep.fromJson(Map<String, dynamic> json) {
+    final isAIMode = json['enableAIDialogue'] == true;
+
     return SimulationStep(
-      id: json['id'],
-      backgroundImagePath: json['backgroundImagePath'],
-      npcDialogue: json['npcDialogue'],
-      responseOptions: (json['responseOptions'] as List)
-          .map((e) => ResponseOption.fromJson(e))
-          .toList(),
-      correctResponseIndex: json['correctResponseIndex'],
-      successFeedback: json['successFeedback'],
-      generalFailureFeedback: json['generalFailureFeedback'],
+      id: json['id'] ?? '',
+      backgroundImagePath: json['backgroundImagePath'] ?? '',
+      npcDialogue: isAIMode ? '' : (json['npcDialogue'] ?? ''),
+      responseOptions: isAIMode
+          ? []
+          : (json['responseOptions'] as List<dynamic>? ?? [])
+                .map((e) => ResponseOption.fromJson(e))
+                .toList(),
+      correctResponseIndex: isAIMode ? 0 : (json['correctResponseIndex'] ?? 0),
+      successFeedback: isAIMode ? '' : (json['successFeedback'] ?? ''),
+      generalFailureFeedback: isAIMode
+          ? ''
+          : (json['generalFailureFeedback'] ?? ''),
       npcRole: json['npcRole'],
       scenarioContext: json['scenarioContext'],
       requiredAllergies: json['requiredAllergies'] != null
           ? List<String>.from(json['requiredAllergies'])
           : null,
       enableAIDialogue: json['enableAIDialogue'] ?? false,
-      initialPrompt: json['initialPrompt'],
+      initialPrompt:
+          json['initialPrompt'] ?? json['initialDialogue'], // fallback
     );
   }
 

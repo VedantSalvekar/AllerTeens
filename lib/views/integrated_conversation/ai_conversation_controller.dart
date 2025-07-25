@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/openai_dialogue_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/assessment_engine.dart';
@@ -7,42 +10,41 @@ import '../../models/game_state.dart';
 import '../../models/simulation_step.dart';
 import '../../models/training_assessment.dart';
 import 'interactive_waiter_game.dart';
+import '../../services/prompt_builder.dart';
+import '../../models/user_model.dart';
 
-/// Controller that manages the synchronization between AI conversation and waiter animations
+/// Redesigned controller for managing realistic restaurant AI interaction
 class AIConversationController extends ChangeNotifier {
-  final OpenAIDialogueService _openaiService;
-  final AuthService _authService;
-  final AssessmentEngine _assessmentEngine;
-  final ProgressTrackingService _progressService;
+  final OpenAIDialogueService _openaiService = OpenAIDialogueService();
+  final AuthService _authService = AuthService();
+  final AssessmentEngine _assessmentEngine = AssessmentEngine();
+  final ProgressTrackingService _progressService = ProgressTrackingService();
   InteractiveWaiterGame? _game;
 
   // Conversation state
   bool _isListening = false;
   bool _isProcessingAI = false;
   bool _speechEnabled = false;
-  String _userSpeechText = '';
-
-  // Conversation context
-  ConversationContext _conversationContext = const ConversationContext();
-  List<ConversationMessage> _displayMessages = [];
-
-  // Animation state tracking
-  bool _isWaiterSpeaking = false;
-  String _currentAnimationState = 'idle';
   bool _conversationEnded = false;
-  bool _waitingForCompletionDialog = false;
+  // Note: Removed _waitingForCompletionDialog - now using onShowCompletionDialog approach
 
-  // Training session management
-  TrainingSession? _currentSession;
-  List<ConversationTurn> _conversationTurns = [];
-  int _allergyMentionCount = 0;
-  int _totalTurns = 0;
-  bool _hasCompletedTraining = false;
-  DateTime? _sessionStartTime;
-  String _scenarioId = 'restaurant_beginner';
-  AssessmentResult? _completedAssessment;
+  String _userSpeechText = '';
+  String _currentAnimationState = 'idle';
+  bool _isWaiterSpeaking = false;
 
-  // Callbacks for UI updates
+  ConversationContext _context = const ConversationContext();
+  List<ConversationMessage> _messages = [];
+
+  // Session info
+  TrainingSession? _session;
+  SimulationStep? _scenarioStep;
+  DateTime? _startTime;
+  int _turnCount = 0;
+  int _allergyMentions = 0;
+  List<ConversationTurn> _turns = [];
+  AssessmentResult? _assessment;
+
+  // Callbacks
   Function(String)? onError;
   Function(List<ConversationMessage>)? onMessagesUpdate;
   Function(String)? onTranscriptionUpdate;
@@ -52,776 +54,279 @@ class AIConversationController extends ChangeNotifier {
   Function(String)? onSubtitleShow;
   Function()? onSubtitleHide;
   Function(AssessmentResult)? onSessionCompleted;
-  Function()? onConversationEnded;
+  // Note: onConversationEnded removed - now using onShowCompletionDialog
 
-  AIConversationController()
-    : _openaiService = OpenAIDialogueService(),
-      _authService = AuthService(),
-      _assessmentEngine = AssessmentEngine(),
-      _progressService = ProgressTrackingService() {
-    _setupOpenAICallbacks();
+  // Add a flag to track if we're speaking the completion message
+  bool _speakingCompletionMessage = false;
+  Function()? onShowCompletionDialog;
+
+  AIConversationController() {
+    _setupCallbacks();
   }
 
-  // Manual end conversation method
-  void endConversationManually() {
-    _conversationEnded = true;
-    onConversationEnded?.call();
-  }
-
-  // Initialize the controller asynchronously
   Future<void> initialize() async {
     try {
-      // Wait for services to initialize
       await _openaiService.initializeServices();
-
-      // Start training session
-      await _startTrainingSession();
-
-      notifyListeners();
+      await _loadScenario();
+      await _startSession();
     } catch (e) {
-      onError?.call('Failed to initialize AI controller: $e');
+      onError?.call('Initialization failed: $e');
     }
   }
 
-  // Start a new training session
-  Future<void> _startTrainingSession() async {
-    try {
-      _sessionStartTime = DateTime.now();
-      _conversationTurns.clear();
-      _allergyMentionCount = 0;
-      _totalTurns = 0;
-      _hasCompletedTraining = false;
-
-      final user = await _authService.getCurrentUserModel();
-      if (user != null) {
-        final sessionId = 'session_${DateTime.now().millisecondsSinceEpoch}';
-        _currentSession = TrainingSession(
-          sessionId: sessionId,
-          userId: user.id,
-          scenarioId: _scenarioId,
-          startTime: _sessionStartTime!,
-          conversationTurns: [],
-          status: SessionStatus.inProgress,
-        );
-      }
-    } catch (e) {
-      onError?.call('Failed to start training session');
-    }
+  Future<void> _loadScenario() async {
+    final config = await rootBundle.loadString(
+      'assets/data/scenarios/restaurant_beginner.json',
+    );
+    final map = jsonDecode(config) as Map<String, dynamic>;
+    _scenarioStep = SimulationStep.fromJson(map);
   }
 
-  // Getters
-  bool get isListening => _isListening;
-  bool get isProcessingAI => _isProcessingAI;
-  bool get speechEnabled => _speechEnabled;
-  String get userSpeechText => _userSpeechText;
-  ConversationContext get conversationContext => _conversationContext;
-  List<ConversationMessage> get displayMessages => _displayMessages;
-  bool get isWaiterSpeaking => _isWaiterSpeaking;
-  String get currentAnimationState => _currentAnimationState;
-  bool get conversationEnded => _conversationEnded;
-  List<ConversationTurn> get conversationTurns => _conversationTurns;
-  AuthService get authService => _authService;
-  AssessmentEngine get assessmentEngine => _assessmentEngine;
-  String get scenarioId => _scenarioId;
-  DateTime? get sessionStartTime => _sessionStartTime;
-  AssessmentResult? get completedAssessment => _completedAssessment;
+  Future<void> _startSession() async {
+    final user = await _authService.getCurrentUserModel();
+    if (user == null) {
+      onError?.call('User not found');
+      return;
+    }
+    _startTime = DateTime.now();
+    _session = TrainingSession(
+      sessionId: 'session_${_startTime!.millisecondsSinceEpoch}',
+      userId: user.id,
+      scenarioId: _scenarioStep?.id ?? '',
+      startTime: _startTime!,
+      conversationTurns: [],
+      status: SessionStatus.inProgress,
+    );
+  }
 
-  // Initialize the controller with the game instance
   void initializeWithGame(InteractiveWaiterGame game) {
     _game = game;
     _startConversation();
   }
 
-  // Enhanced method to process user input with training assessment
-  Future<void> processUserInputWithAssessment(String userInput) async {
-    try {
-      if (_conversationEnded) {
-        return;
-      }
+  void _startConversation() {
+    _openaiService.resetConversation();
+    _addMessage(
+      "Welcome! Let me know whenever you're ready to order.",
+      role: 'assistant',
+    );
+    _setAnimation('greeting');
+    Future.delayed(
+      const Duration(milliseconds: 500),
+      () => _speak("Welcome! Let me know whenever you're ready to order."),
+    );
+  }
 
-      _userSpeechText = '';
-      onTranscriptionUpdate?.call('');
-      await _openaiService.stopListening();
+  Future<void> processUserInput(String input) async {
+    if (_conversationEnded || input.trim().isEmpty) return;
 
-      _totalTurns++;
-      _isProcessingAI = true;
-      onProcessingStateChange?.call(true);
+    _userSpeechText = '';
+    onTranscriptionUpdate?.call('');
+    _isProcessingAI = true;
+    onProcessingStateChange?.call(true);
+    notifyListeners();
 
-      if (_isWaiterSpeaking) {
-        await _openaiService.stopSpeaking();
-        _isWaiterSpeaking = false;
-      }
+    final user = await _authService.getCurrentUserModel();
+    if (user == null || _scenarioStep == null) return;
 
-      _setWaiterAnimation('thinking');
+    _turnCount++;
 
-      notifyListeners();
-
-      final user = await _authService.getCurrentUserModel();
-      if (user == null) {
-        onError?.call('User not authenticated');
-        return;
-      }
-
-      final mentionedAllergies = _analyzeAllergyMentions(
-        userInput,
-        user.allergies,
-      );
-      if (mentionedAllergies.isNotEmpty) {
-        _allergyMentionCount++;
-      }
-
-      final trainingContext = _createTrainingContext(
-        user,
-        _totalTurns,
-        _allergyMentionCount,
-      );
-
-      final response = await _openaiService.getOpenAIResponse(
-        userInput: userInput,
-        currentStep: SimulationStep(
-          id: 'training_step',
-          backgroundImagePath:
-              'assets/images/backgrounds/restaurant_interior.png',
-          npcDialogue: 'Welcome to training',
-          responseOptions: [],
-          correctResponseIndex: 0,
-          successFeedback: 'Good job',
-          generalFailureFeedback: 'Try again',
-          npcRole: 'waiter',
-          scenarioContext: 'restaurant_training',
-          enableAIDialogue: true,
-        ),
-        playerProfile: PlayerProfile(
+    // ✅ NEW: AI handles all analysis - no manual phrase detection needed
+    final aiResponse = await _openaiService.getOpenAIResponse(
+      userInput: input,
+      currentStep: _scenarioStep!,
+      playerProfile: PlayerProfile(
+        name: user.name,
+        preferredName: user.name.split(' ').first,
+        age: 16,
+        allergies: user.allergies,
+      ),
+      npcRole: _scenarioStep!.npcRole ?? 'waiter',
+      scenarioContext: _scenarioStep!.scenarioContext ?? '',
+      context: _context,
+      systemPrompt: PromptBuilder.buildSystemPrompt(
+        step: _scenarioStep!,
+        profile: PlayerProfile(
           name: user.name,
+          preferredName: user.name.split(' ').first,
           age: 16,
           allergies: user.allergies,
-          preferredName: user.name.split(' ').first,
         ),
-        npcRole: 'waiter',
-        scenarioContext: 'restaurant_training',
-        context: _conversationContext,
-      );
-      final conversationTurn = ConversationTurn(
-        userInput: userInput,
-        aiResponse: response.npcDialogue,
-        detectedAllergies: mentionedAllergies,
-        timestamp: DateTime.now(),
+        totalTurns: _turnCount,
+        allergyMentionCount: _allergyMentions,
+      ),
+    );
+
+    // ✅ NEW: Use AI-analyzed context directly
+    _context = aiResponse.updatedContext;
+
+    // Update allergy mention count for prompt building
+    if (_context.allergiesDisclosed && _allergyMentions == 0) {
+      _allergyMentions = 1;
+    }
+
+    _turns.add(
+      ConversationTurn(
+        userInput: input,
+        aiResponse: aiResponse.npcDialogue,
+        turnNumber: _turnCount,
+        detectedAllergies: aiResponse.detectedAllergies,
         assessment: TurnAssessment(
-          allergyMentionScore: mentionedAllergies.isNotEmpty ? 10 : 0,
-          clarityScore: userInput.length > 10 ? 8 : 5,
-          proactivenessScore: _totalTurns <= 2 && mentionedAllergies.isNotEmpty
+          allergyMentionScore: aiResponse.detectedAllergies.isNotEmpty ? 10 : 0,
+          clarityScore: input.length > 10 ? 8 : 5,
+          proactivenessScore:
+              _turnCount <= 2 && aiResponse.detectedAllergies.isNotEmpty
               ? 10
               : 0,
-          mentionedAllergies: mentionedAllergies.isNotEmpty,
-          askedQuestions: userInput.contains('?'),
-          detectedSkills: mentionedAllergies.isNotEmpty
+          mentionedAllergies: aiResponse.detectedAllergies.isNotEmpty,
+          askedQuestions: input.contains('?'),
+          detectedSkills: aiResponse.detectedAllergies.isNotEmpty
               ? ['Allergy Disclosure']
               : [],
         ),
-        turnNumber: _totalTurns,
-      );
-
-      _conversationTurns.add(conversationTurn);
-
-      _updateConversationMessages(userInput, response.npcDialogue);
-
-      if (_shouldEndTraining(response)) {
-        await _endTrainingSession();
-        return;
-      } else {
-        _conversationContext = response.updatedContext;
-        _setWaiterAnimation(_determineAnimationType(response));
-        await _speakNPCResponse(response.npcDialogue);
-      }
-    } catch (e) {
-      onError?.call(
-        'Sorry, I had trouble processing your message. Please try again.',
-      );
-      _setWaiterAnimation('idle');
-    } finally {
-      _isProcessingAI = false;
-      onProcessingStateChange?.call(false);
-      notifyListeners();
-    }
-  }
-
-  List<String> _analyzeAllergyMentions(
-    String userInput,
-    List<String> userAllergies,
-  ) {
-    final mentionedAllergies = <String>[];
-    final lowerInput = userInput.toLowerCase();
-
-    final isDisclosingAllergies = _isActuallyDisclosingAllergies(
-      lowerInput,
-      userAllergies,
-    );
-
-    if (!isDisclosingAllergies) {
-      return mentionedAllergies;
-    }
-
-    for (final allergy in userAllergies) {
-      if (lowerInput.contains(allergy.toLowerCase()) ||
-          lowerInput.contains('${allergy.toLowerCase()}s') ||
-          lowerInput.contains('allergic to $allergy')) {
-        mentionedAllergies.add(allergy);
-      }
-    }
-
-    if (lowerInput.contains('allergy') ||
-        lowerInput.contains('allergic') ||
-        lowerInput.contains('reaction')) {
-      mentionedAllergies.addAll(['allergy_mentioned']);
-    }
-
-    return mentionedAllergies;
-  }
-
-  bool _isActuallyDisclosingAllergies(
-    String lowerInput,
-    List<String> userAllergies,
-  ) {
-    final allergyDisclosurePatterns = [
-      'i\'m allergic to',
-      'i am allergic to',
-      'i have allergies',
-      'i have allergy',
-      'i have an allergy',
-      'my allergies are',
-      'my allergy is',
-      'i can\'t eat',
-      'i cannot eat',
-      'i\'m intolerant to',
-      'i am intolerant to',
-      'i have a sensitivity to',
-      'i react to',
-      'i\'m sensitive to',
-      'i am sensitive to',
-      'allergic to',
-      'allergy to',
-      'intolerant to',
-      'sensitive to',
-      'reaction to',
-      'can\'t have',
-      'cannot have',
-      'i avoid',
-      'i stay away from',
-      'bad reaction to',
-      'makes me sick',
-      'doctor said',
-      'doctor told me',
-      'advised not to eat',
-      'told not to eat',
-      'not supposed to eat',
-      'shouldn\'t eat',
-      'mustn\'t eat',
-      'restricted from',
-      'forbidden from eating',
-      'yes, i have',
-      'yes i have',
-      'yes, i\'m allergic',
-      'yes i\'m allergic',
-      'yes, i am allergic',
-      'yes i am allergic',
-    ];
-
-    for (final pattern in allergyDisclosurePatterns) {
-      if (lowerInput.contains(pattern)) {
-        return true;
-      }
-    }
-
-    final foodOrderingPatterns = [
-      'i\'ll have',
-      'i will have',
-      'i want',
-      'i\'d like',
-      'i would like',
-      'i\'ll take',
-      'i will take',
-      'i\'ll order',
-      'i will order',
-      'i\'ll get',
-      'i will get',
-      'give me',
-      'can i have',
-      'can i get',
-      'order',
-      'menu',
-      'what do you have',
-      'what can i have',
-      'what options',
-      'recommend',
-      'suggest',
-    ];
-
-    for (final pattern in foodOrderingPatterns) {
-      if (lowerInput.contains(pattern)) {
-        return false;
-      }
-    }
-
-    return false;
-  }
-
-  String _createTrainingContext(
-    dynamic user,
-    int totalTurns,
-    int allergyMentionCount,
-  ) {
-    if (totalTurns >= 3 && allergyMentionCount == 0) {
-      return '''[TRAINING CONTEXT: User has NOT mentioned any allergies in $totalTurns turns. 
-This is a BEGINNER training session. The AI waiter should:
-- Give GENTLE but CLEAR guidance about allergy disclosure
-- Explain WHY allergy disclosure is important for safety
-- Encourage the user to mention any allergies they might have
-- Ask direct questions about allergies if needed
-- Be supportive but emphasize the importance of food safety
-- DO NOT assume what allergies the user has - only respond to what they tell you]''';
-    } else if (totalTurns >= 2 && allergyMentionCount == 0) {
-      return '''[TRAINING CONTEXT: User should mention any allergies they have soon.
-Gently prompt them to share any dietary restrictions or allergies.
-DO NOT assume what allergies they have - only respond to what they tell you.]''';
-    } else if (allergyMentionCount > 0) {
-      return '''[TRAINING CONTEXT: Great! User has mentioned allergies. 
-Provide positive reinforcement and continue with helpful service.]''';
-    }
-
-    return '';
-  }
-
-  void _updateConversationMessages(String userInput, String aiResponse) {
-    final userMessage = ConversationMessage(
-      role: 'user',
-      content: userInput,
-      timestamp: DateTime.now(),
-    );
-
-    final aiMessage = ConversationMessage(
-      role: 'assistant',
-      content: aiResponse,
-      timestamp: DateTime.now(),
-    );
-
-    _displayMessages.addAll([userMessage, aiMessage]);
-    onMessagesUpdate?.call(_displayMessages);
-    notifyListeners();
-  }
-
-  bool _shouldEndTraining(NPCDialogueResponse response) {
-    final hasDisclosedAllergies = _conversationContext.allergiesDisclosed;
-    final hasCompletedOrder =
-        _conversationContext.confirmedDish &&
-        _conversationContext.selectedDish != null;
-
-    final aiJustGaveSafetyWarning =
-        response.npcDialogue.toLowerCase().contains('wouldn\'t be safe') ||
-        response.npcDialogue.toLowerCase().contains('not safe') ||
-        response.npcDialogue.toLowerCase().contains('contains') &&
-            response.npcDialogue.toLowerCase().contains('allergic to') ||
-        response.npcDialogue.toLowerCase().contains(
-          'would you like to choose a different',
-        ) ||
-        response.npcDialogue.toLowerCase().contains(
-          'consider a different dish',
-        );
-
-    final lastUserInput = _conversationTurns.isNotEmpty
-        ? _conversationTurns.last.userInput.toLowerCase()
-        : '';
-    final userIndicatesCompletion =
-        lastUserInput.contains('thank you') ||
-        lastUserInput.contains('thanks') ||
-        lastUserInput.contains('no questions') ||
-        lastUserInput.contains('i\'m good') ||
-        lastUserInput.contains('that\'s all') ||
-        lastUserInput.contains('i don\'t need') ||
-        lastUserInput.contains('nothing else');
-
-    final isJustAskingQuestions =
-        lastUserInput.contains('what can i have') ||
-        lastUserInput.contains('what can i eat') ||
-        lastUserInput.contains('what\'s on the menu') ||
-        lastUserInput.contains('what options') ||
-        lastUserInput.contains('what\'s available') ||
-        lastUserInput.contains('recommend') ||
-        lastUserInput.contains('suggest') ||
-        lastUserInput.contains('menu');
-
-    final aiIndicatesEnd = response.shouldEndConversation;
-    final tooManyTurns = _totalTurns > 8;
-
-    final shouldEnd =
-        ((hasCompletedOrder && userIndicatesCompletion) ||
-            (hasDisclosedAllergies &&
-                hasCompletedOrder &&
-                !aiJustGaveSafetyWarning) ||
-            aiIndicatesEnd ||
-            tooManyTurns) &&
-        !isJustAskingQuestions;
-
-    return shouldEnd;
-  }
-
-  Future<void> _endTrainingSession() async {
-    try {
-      _conversationEnded = true;
-
-      final hasActualSafeOrder =
-          _conversationContext.selectedDish != null &&
-          _conversationContext.confirmedDish &&
-          _conversationContext.allergiesDisclosed;
-
-      final lastAIResponse = _conversationTurns.isNotEmpty
-          ? _conversationTurns.last.aiResponse.toLowerCase()
-          : '';
-      final hadSafetyWarning =
-          lastAIResponse.contains('wouldn\'t be safe') ||
-          lastAIResponse.contains('not safe') ||
-          lastAIResponse.contains('contains') ||
-          lastAIResponse.contains('allergic to');
-
-      String completionContent;
-      if (hasActualSafeOrder && !hadSafetyWarning) {
-        completionContent =
-            "Perfect! Your ${_conversationContext.selectedDish} is all set and will be prepared safely for your allergies. Your training session is now complete. Well done!";
-      } else if (_conversationContext.allergiesDisclosed) {
-        completionContent =
-            "Excellent work! You did a great job communicating about your allergies and staying safe by avoiding unsafe food. That's the most important part of dining safely. Your training session is now complete. Well done!";
-      } else {
-        completionContent =
-            "Training session complete! Remember: always tell your waiter about your food allergies to stay safe. Keep practicing!";
-      }
-
-      final completionMessage = ConversationMessage(
-        role: 'assistant',
-        content: completionContent,
         timestamp: DateTime.now(),
-      );
-
-      _displayMessages.add(completionMessage);
-      onMessagesUpdate?.call(_displayMessages);
-
-      await _speakNPCResponse(completionMessage.content);
-
-      _waitingForCompletionDialog = true;
-
-      if (_currentSession == null) {
-        return;
-      }
-
-      final completedSession = TrainingSession(
-        sessionId: _currentSession!.sessionId,
-        userId: _currentSession!.userId,
-        scenarioId: _currentSession!.scenarioId,
-        startTime: _currentSession!.startTime,
-        endTime: DateTime.now(),
-        conversationTurns: _conversationTurns,
-        status: SessionStatus.completed,
-        durationMinutes: DateTime.now()
-            .difference(_currentSession!.startTime)
-            .inMinutes,
-      );
-
-      final user = await _authService.getCurrentUserModel();
-      final assessment = await _assessmentEngine.assessTrainingSession(
-        conversationTurns: _conversationTurns,
-        playerProfile: PlayerProfile(
-          name: user?.name ?? 'User',
-          age: 16,
-          allergies: user?.allergies ?? [],
-          preferredName: user?.name.split(' ').first ?? 'User',
-        ),
-        scenarioId: _currentSession!.scenarioId,
-        sessionStart: _currentSession!.startTime,
-        sessionEnd: DateTime.now(),
-        conversationContext: _conversationContext,
-      );
-
-      try {
-        await _progressService.saveTrainingSession(completedSession);
-        await _progressService.updateUserProgress(
-          userId: _currentSession!.userId,
-          scenarioId: _currentSession!.scenarioId,
-          assessment: assessment,
-          session: completedSession,
-        );
-      } catch (saveError) {
-        // Continue with feedback screen even if cloud save fails
-      }
-
-      _completedAssessment = assessment;
-      _hasCompletedTraining = true;
-    } catch (e) {
-      if (onSessionCompleted != null) {
-        final fallbackAssessment = AssessmentResult(
-          allergyDisclosureScore: 8,
-          clarityScore: 7,
-          proactivenessScore: 6,
-          ingredientInquiryScore: 5,
-          riskAssessmentScore: 7,
-          confidenceScore: 6,
-          politenessScore: 8,
-          completionBonus: 3,
-          improvementBonus: 0,
-          totalScore: 50,
-          overallGrade: 'C',
-          strengths: ['Completed the conversation'],
-          improvements: ['Practice allergy disclosure', 'Ask more questions'],
-          detailedFeedback:
-              'Training completed! Keep practicing to improve your allergy communication skills.',
-          assessedAt: DateTime.now(),
-        );
-        onSessionCompleted?.call(fallbackAssessment);
-      } else {
-        onError?.call(
-          'Training completed but could not show detailed feedback',
-        );
-      }
-    }
-  }
-
-  Future<void> handlePrematureExit() async {
-    try {
-      if (_currentSession != null) {
-        final abandonedSession = TrainingSession(
-          sessionId: _currentSession!.sessionId,
-          userId: _currentSession!.userId,
-          scenarioId: _currentSession!.scenarioId,
-          startTime: _currentSession!.startTime,
-          endTime: DateTime.now(),
-          conversationTurns: _conversationTurns,
-          status: SessionStatus.abandoned,
-          durationMinutes: DateTime.now()
-              .difference(_currentSession!.startTime)
-              .inMinutes,
-        );
-
-        await _progressService.saveTrainingSession(abandonedSession);
-      }
-    } catch (e) {
-      // Handle error silently
-    }
-  }
-
-  void _setupOpenAICallbacks() {
-    _openaiService.onTranscriptionUpdate = (text) {
-      _userSpeechText = text;
-      onTranscriptionUpdate?.call(text);
-      notifyListeners();
-    };
-
-    _openaiService.onListeningStateChange = (isListening) {
-      _isListening = isListening;
-      onListeningStateChange?.call(isListening);
-      notifyListeners();
-    };
-
-    _openaiService.onError = (error) {
-      onError?.call(error);
-    };
-
-    _openaiService.onSpeechEnabledChange = (enabled) {
-      _speechEnabled = enabled;
-      onSpeechEnabledChange?.call(enabled);
-      notifyListeners();
-    };
-
-    _openaiService.onContextUpdate = (context) {
-      _conversationContext = context;
-      notifyListeners();
-    };
-
-    _openaiService.onTTSStarted = () {
-      _isWaiterSpeaking = true;
-      _currentAnimationState = 'talking';
-      _game?.onAIStartSpeaking();
-
-      final latestAI = _getLatestAIMessage();
-      if (latestAI != null) {
-        onSubtitleShow?.call(latestAI);
-      }
-
-      notifyListeners();
-    };
-
-    _openaiService.onTTSCompleted = () {
-      _isWaiterSpeaking = false;
-      _currentAnimationState = 'idle';
-      _game?.onAIStopSpeaking();
-
-      onSubtitleHide?.call();
-
-      if (_waitingForCompletionDialog) {
-        _waitingForCompletionDialog = false;
-        Future.delayed(const Duration(milliseconds: 300), () {
-          onConversationEnded?.call();
-        });
-      }
-
-      notifyListeners();
-    };
-  }
-
-  void _startConversation() {
-    _openaiService.resetConversation();
-
-    final initialMessage = ConversationMessage(
-      role: 'assistant',
-      content:
-          "Hello! I'm your AI waiter. Welcome to our restaurant! I'm here to help you order safely. What can I get started for you today?",
-      timestamp: DateTime.now(),
+      ),
     );
 
-    _displayMessages = [initialMessage];
-    onMessagesUpdate?.call(_displayMessages);
+    _addMessage(input, role: 'user');
 
-    _setWaiterAnimation('greeting');
+    // ✅ FIXED: Robust conversation ending logic
+    bool shouldEnd = false;
+    String endReason = '';
 
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _speakNPCResponse(initialMessage.content);
-    });
-  }
+    // Priority 1: AI explicitly indicates conversation should end
+    if (aiResponse.shouldEndConversation) {
+      shouldEnd = true;
+      endReason = 'AI indicated conversation should end';
+    }
+    // Priority 2: Natural restaurant flow - order placed and confirmed after reasonable turns
+    else if (_context.selectedDish != null &&
+        _context.confirmedDish &&
+        _turnCount >= 2) {
+      shouldEnd = true;
+      endReason = 'Order placed and confirmed (realistic restaurant flow)';
+    }
+    // Priority 3: Complete interaction - user ordered food AND disclosed allergies in reasonable turns
+    else if (_context.selectedDish != null &&
+        _context.allergiesDisclosed &&
+        _turnCount >= 2) {
+      shouldEnd = true;
+      endReason = 'Complete interaction: order placed and allergies disclosed';
+    }
+    // Priority 4: Reasonable conversation length (like real restaurant)
+    else if (_turnCount >= 6) {
+      shouldEnd = true;
+      endReason = 'Natural conversation length reached (${_turnCount} turns)';
+    }
 
-  // Handle speech input
-  Future<void> handleSpeechInput() async {
-    if (_isListening) {
-      await _openaiService.stopListening();
+    if (shouldEnd) {
+      // Don't add or speak the regular AI response when ending - let _completeSession handle the final message
+      debugPrint('[CONVERSATION END] Ending conversation: $endReason');
+      debugPrint(
+        '[CONVERSATION END] State: allergies=${_context.allergiesDisclosed}, dish=${_context.selectedDish}, confirmed=${_context.confirmedDish}, turns=${_turnCount}',
+      );
+      await _completeSession(user);
     } else {
-      _userSpeechText = '';
-      onTranscriptionUpdate?.call('');
-      await _openaiService.startListening();
+      // Normal flow - add and speak the AI response
+      _addMessage(aiResponse.npcDialogue, role: 'assistant');
+      await _speak(aiResponse.npcDialogue);
+      debugPrint(
+        '[CONVERSATION CONTINUE] allergies=${_context.allergiesDisclosed}, dish=${_context.selectedDish}, confirmed=${_context.confirmedDish}, turns=${_turnCount}',
+      );
     }
+
+    _isProcessingAI = false;
+    onProcessingStateChange?.call(false);
+    notifyListeners();
   }
 
-  // Process user speech and get AI response
-  Future<void> processUserSpeech() async {
-    if (_isProcessingAI || _userSpeechText.trim().isEmpty) return;
+  Future<void> _completeSession(UserModel user) async {
+    _conversationEnded = true;
 
-    final userInput = _userSpeechText;
+    // Stop any current speech first
+    await _openaiService.stopSpeaking();
 
-    // Add user message to display immediately
-    final userMessage = ConversationMessage(
-      role: 'user',
-      content: userInput,
-      timestamp: DateTime.now(),
+    // Create the assessment and session data first
+    final endTime = DateTime.now();
+    final completedSession = TrainingSession(
+      sessionId: _session!.sessionId,
+      userId: _session!.userId,
+      scenarioId: _session!.scenarioId,
+      startTime: _session!.startTime,
+      endTime: endTime,
+      conversationTurns: _turns,
+      finalAssessment: null,
+      status: SessionStatus.completed,
+      durationMinutes: endTime.difference(_startTime!).inMinutes,
     );
 
-    _isProcessingAI = true;
-    _userSpeechText = '';
-    _displayMessages = [..._displayMessages, userMessage];
-
-    onProcessingStateChange?.call(true);
-    onTranscriptionUpdate?.call('');
-    onMessagesUpdate?.call(_displayMessages);
-    notifyListeners();
-
-    _setWaiterAnimation('thinking');
+    final assessment = await _assessmentEngine.assessTrainingSession(
+      conversationTurns: _turns,
+      playerProfile: PlayerProfile(
+        name: user.name,
+        preferredName: user.name.split(' ').first,
+        age: 16,
+        allergies: user.allergies,
+      ),
+      scenarioId: _session!.scenarioId,
+      sessionStart: _session!.startTime,
+      sessionEnd: endTime,
+      conversationContext: _context,
+    );
 
     try {
-      final mockStep = SimulationStep(
-        id: 'interactive_ai_conversation',
-        backgroundImagePath: 'backgrounds/restaurant_interior.png',
-        npcDialogue: '',
-        responseOptions: [],
-        correctResponseIndex: 0,
-        successFeedback: 'Great conversation!',
-        generalFailureFeedback: 'Keep practicing!',
-        npcRole: 'Waiter',
-        scenarioContext:
-            'A busy restaurant where you need to order food safely with your allergies',
-        enableAIDialogue: true,
+      await _progressService.saveTrainingSession(completedSession);
+      await _progressService.updateUserProgress(
+        userId: user.id,
+        scenarioId: _session!.scenarioId,
+        assessment: assessment,
+        session: completedSession,
       );
+    } catch (_) {}
 
-      final authState = _authService.currentUser;
-      final userModel = await _authService.getCurrentUserModel();
-      final playerProfile = PlayerProfile(
-        name: userModel?.name ?? 'User',
-        preferredName: userModel?.name?.split(' ').first ?? 'User',
-        age: 16,
-        allergies: userModel?.allergies ?? [],
-      );
+    _assessment = assessment;
 
-      final aiResponse = await _openaiService.getOpenAIResponse(
-        userInput: userInput,
-        currentStep: mockStep,
-        playerProfile: playerProfile,
-        npcRole: 'Waiter',
-        scenarioContext:
-            'You are a friendly, professional waiter at a busy restaurant. Help this teenager practice communicating about their food allergies safely. Be encouraging when they communicate well, and gently guide them when they need improvement.',
-        context: _conversationContext,
-      );
+    // Single completion message - only add to messages, don't duplicate
+    String completionMessage =
+        "All right, I'll place that order for you now. Your training session is complete.";
+    _addMessage(completionMessage, role: 'assistant');
 
-      final aiMessage = ConversationMessage(
-        role: 'assistant',
-        content: aiResponse.npcDialogue,
-        timestamp: DateTime.now(),
-      );
+    // Set flag before speaking
+    _speakingCompletionMessage = true;
+    await _speak(completionMessage);
+    // Note: _speakingCompletionMessage will be set to false in the TTS callback
+  }
 
-      _displayMessages = [..._displayMessages, aiMessage];
-      _conversationContext = aiResponse.updatedContext;
-
-      onMessagesUpdate?.call(_displayMessages);
-      notifyListeners();
-
-      final animationType = _determineAnimationType(aiResponse);
-
-      if (animationType != 'talking') {
-        _setWaiterAnimation(animationType);
-      }
-
-      await _speakNPCResponse(aiResponse.npcDialogue);
-    } catch (e) {
-      onError?.call('Sorry, I had trouble understanding. Please try again.');
-      _setWaiterAnimation('idle');
-    } finally {
-      _isProcessingAI = false;
-      onProcessingStateChange?.call(false);
-      notifyListeners();
+  // Call this from the UI when the user taps 'Finish Training' in the dialog
+  void finishTrainingAndShowFeedback() {
+    if (_assessment != null && onSessionCompleted != null) {
+      onSessionCompleted!(_assessment!);
     }
   }
 
-  String _determineAnimationType(NPCDialogueResponse response) {
-    final content = response.npcDialogue.toLowerCase();
-
-    // Check for positive feedback indicators
-    if (content.contains('great') ||
-        content.contains('good') ||
-        content.contains('excellent') ||
-        content.contains('perfect') ||
-        content.contains('well done') ||
-        content.contains('nice')) {
-      return 'positive';
+  Future<void> _speak(String text) async {
+    try {
+      onSubtitleShow?.call(text); // 👈 SHOW SUBTITLES BEFORE SPEAKING
+      await _openaiService.speakNPCResponse(text);
+    } catch (_) {
+      _isWaiterSpeaking = false;
+      _setAnimation('idle');
     }
-
-    // Check for negative/corrective feedback
-    if (content.contains('remember') ||
-        content.contains('important') ||
-        content.contains('should') ||
-        content.contains('need to') ||
-        content.contains('don\'t forget')) {
-      return 'negative';
-    }
-
-    // Default to talking animation
-    return 'talking';
   }
 
-  void _setWaiterAnimation(String animationType) {
-    if (_currentAnimationState == 'talking' &&
-        animationType != 'talking' &&
-        animationType != 'idle') {
-      return;
-    }
+  void _addMessage(String text, {required String role}) {
+    final msg = ConversationMessage(
+      role: role,
+      content: text,
+      timestamp: DateTime.now(),
+    );
+    _messages.add(msg);
+    onMessagesUpdate?.call(_messages);
+  }
 
-    if (animationType == 'talking') {
-      return;
-    }
-
-    _currentAnimationState = animationType;
-
-    switch (animationType) {
+  void _setAnimation(String anim) {
+    _currentAnimationState = anim;
+    switch (anim) {
       case 'greeting':
         _game?.onAIGreeting();
         break;
@@ -836,67 +341,73 @@ Provide positive reinforcement and continue with helpful service.]''';
         break;
       default:
         _game?.onAIStopSpeaking();
-        break;
     }
-
     notifyListeners();
   }
 
-  Future<void> _speakNPCResponse(String text) async {
-    try {
-      await _openaiService.speakNPCResponse(text);
-    } catch (e) {
-      _isWaiterSpeaking = false;
-      _setWaiterAnimation('idle');
+  void _setupCallbacks() {
+    _openaiService.onTranscriptionUpdate = (t) {
+      _userSpeechText = t;
+      onTranscriptionUpdate?.call(t);
+    };
+    _openaiService.onListeningStateChange = (v) {
+      _isListening = !_conversationEnded && v;
+      onListeningStateChange?.call(_isListening);
+    };
+    _openaiService.onSpeechEnabledChange = (v) {
+      _speechEnabled = v;
+      onSpeechEnabledChange?.call(v);
+    };
+    _openaiService.onTTSStarted = () {
+      _isWaiterSpeaking = true;
+      _game?.onAIStartSpeaking(); // Switch to talking spritesheet
+      _currentAnimationState = 'talking';
       notifyListeners();
+    };
+    _openaiService.onTTSCompleted = () {
+      _isWaiterSpeaking = false;
+      _game?.onAIStopSpeaking(); // Switch back to idle spritesheet
+      _currentAnimationState = 'idle';
+      onSubtitleHide?.call();
+
+      // If we just finished the completion message, show the dialog
+      if (_speakingCompletionMessage) {
+        _speakingCompletionMessage = false;
+        if (onShowCompletionDialog != null) {
+          Future.delayed(const Duration(milliseconds: 200), () {
+            onShowCompletionDialog!();
+          });
+        }
+      }
+
+      // Note: Removed _waitingForCompletionDialog logic - now using onShowCompletionDialog
+      notifyListeners();
+    };
+    _openaiService.onError = (err) => onError?.call(err);
+  }
+
+  Future<void> handleSpeechInput() async {
+    if (_conversationEnded) return;
+    if (_isListening) {
+      await _openaiService.stopListening();
+    } else {
+      _userSpeechText = '';
+      await _openaiService.startListening();
     }
   }
 
-  // Reset conversation
   void resetConversation() {
-    _displayMessages.clear();
-    _conversationContext = const ConversationContext();
-    _userSpeechText = '';
+    _messages.clear();
+    _context = const ConversationContext();
+    _turnCount = 0;
+    _allergyMentions = 0;
     _isProcessingAI = false;
     _isListening = false;
     _isWaiterSpeaking = false;
     _conversationEnded = false;
-    _waitingForCompletionDialog = false;
-    _completedAssessment = null;
-
-    onMessagesUpdate?.call(_displayMessages);
-    notifyListeners();
-
+    _assessment = null;
+    onMessagesUpdate?.call(_messages);
     _startConversation();
-  }
-
-  // Allow continuing conversation after it was marked as ended
-  void continueConversation() {
-    _conversationEnded = false;
-    _waitingForCompletionDialog = false;
-    notifyListeners();
-  }
-
-  Future<void> stopSpeaking() async {
-    await _openaiService.stopSpeaking();
-
-    _isWaiterSpeaking = false;
-    _currentAnimationState = 'idle';
-    _game?.onAIStopSpeaking();
-
-    notifyListeners();
-  }
-
-  String? _getLatestAIMessage() {
-    if (_displayMessages.isEmpty) return null;
-
-    // Find the most recent AI message
-    for (int i = _displayMessages.length - 1; i >= 0; i--) {
-      if (_displayMessages[i].role == 'assistant') {
-        return _displayMessages[i].content;
-      }
-    }
-    return null;
   }
 
   @override
@@ -904,4 +415,20 @@ Provide positive reinforcement and continue with helpful service.]''';
     _openaiService.dispose();
     super.dispose();
   }
+
+  // Exposed for external needs
+  bool get isListening => _isListening;
+  bool get isProcessingAI => _isProcessingAI;
+  bool get speechEnabled => _speechEnabled;
+  String get userSpeechText => _userSpeechText;
+  String get currentAnimationState => _currentAnimationState;
+  ConversationContext get conversationContext => _context;
+  List<ConversationMessage> get displayMessages => _messages;
+  AssessmentEngine get assessmentEngine => _assessmentEngine;
+  AuthService get authService => _authService;
+  String get scenarioId => _scenarioStep?.id ?? '';
+  DateTime? get sessionStartTime => _startTime;
+  AssessmentResult? get completedAssessment => _assessment;
+  List<ConversationTurn> get conversationTurns => _turns;
+  void endConversationManually() => onShowCompletionDialog?.call();
 }

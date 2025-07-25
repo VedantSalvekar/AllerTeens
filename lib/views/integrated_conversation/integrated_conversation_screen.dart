@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flame/game.dart';
 import 'package:provider/provider.dart';
 import '../../services/openai_dialogue_service.dart';
+import '../../services/menu_service.dart';
 import '../../core/constants.dart';
 import '../../models/training_assessment.dart';
 import '../../models/game_state.dart';
@@ -33,6 +34,11 @@ class _IntegratedConversationScreenState
   void initState() {
     super.initState();
     _initializeController();
+
+    // Set up the completion dialog callback
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _aiController.onShowCompletionDialog = _showFinishTrainingDialog;
+    });
   }
 
   @override
@@ -72,8 +78,6 @@ class _IntegratedConversationScreenState
 
   @override
   void dispose() {
-    // Handle premature exit before disposing
-    _aiController.handlePrematureExit();
     _aiController.dispose();
     super.dispose();
   }
@@ -91,12 +95,10 @@ class _IntegratedConversationScreenState
     _aiController.onError = (error) {
       if (mounted) {
         Color backgroundColor = Colors.red;
-        String actionText = 'Try Again';
 
         // Different colors and messages for different error types
         if (error.contains('No speech detected')) {
           backgroundColor = Colors.orange;
-          actionText = 'Tips';
         } else if (error.contains('Speech timeout')) {
           backgroundColor = Colors.blue;
         }
@@ -105,15 +107,6 @@ class _IntegratedConversationScreenState
           SnackBar(
             content: Text(error),
             backgroundColor: backgroundColor,
-            action: error.contains('No speech detected')
-                ? SnackBarAction(
-                    label: actionText,
-                    textColor: Colors.white,
-                    onPressed: () {
-                      _showSpeechTips(context);
-                    },
-                  )
-                : null,
             duration: Duration(seconds: 4),
           ),
         );
@@ -169,12 +162,7 @@ class _IntegratedConversationScreenState
       }
     };
 
-    // Handle conversation ended
-    _aiController.onConversationEnded = () {
-      if (mounted) {
-        _showConversationEndedDialog();
-      }
-    };
+    // Note: onConversationEnded callback removed - we now use onShowCompletionDialog for the proper flow
   }
 
   void _showFeedbackScreen(AssessmentResult assessment) {
@@ -193,44 +181,6 @@ class _IntegratedConversationScreenState
           },
         ),
       ),
-    );
-  }
-
-  void _showConversationEndedDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Prevent dismissal by tapping outside
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Training Complete!'),
-          content: const Text(
-            'Great job! You successfully communicated your allergies and placed your order safely. Would you like to continue practicing or finish your training?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-                // Continue conversation (allow more input)
-                _aiController.continueConversation();
-              },
-              child: const Text('Continue Practicing'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-
-                // Show feedback screen if assessment is ready
-                if (_aiController.completedAssessment != null) {
-                  _showFeedbackScreen(_aiController.completedAssessment!);
-                } else {
-                  Navigator.of(context).pop(); // Close conversation screen
-                }
-              },
-              child: const Text('Finish Training'),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -337,58 +287,6 @@ class _IntegratedConversationScreenState
     // Restart the training session
     _aiController.dispose();
     _initializeController();
-  }
-
-  void _showSpeechTips(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.mic_none, color: Colors.blue),
-            SizedBox(width: 8),
-            Text('Speech Recognition Tips'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'For better speech recognition:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 12),
-            _buildTip('🔊', 'Speak clearly and at normal volume'),
-            _buildTip('🤫', 'Find a quiet environment'),
-            _buildTip('⏱️', 'Speak at a steady pace'),
-            _buildTip('📱', 'Hold device 6-12 inches away'),
-            _buildTip('🎯', 'Wait for the microphone to activate'),
-            _buildTip('🔄', 'Try again if recognition fails'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('Got it'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTip(String emoji, String text) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(emoji, style: TextStyle(fontSize: 16)),
-          SizedBox(width: 8),
-          Expanded(child: Text(text)),
-        ],
-      ),
-    );
   }
 
   @override
@@ -636,7 +534,60 @@ class _IntegratedConversationScreenState
                   ),
 
                   // Send button (appears when user has spoken)
-                  if (_aiController.userSpeechText.isNotEmpty)
+                  // if (_aiController.userSpeechText.isNotEmpty)
+                  //   Padding(
+                  //     padding: const EdgeInsets.only(top: 12),
+                  //     child: Container(
+                  //       width: micButtonSize * 0.7,
+                  //       height: micButtonSize * 0.7,
+                  //       decoration: BoxDecoration(
+                  //         shape: BoxShape.circle,
+                  //         color: AppColors.success,
+                  //         boxShadow: [
+                  //           BoxShadow(
+                  //             color: Colors.black.withOpacity(0.2),
+                  //             blurRadius: 10,
+                  //             offset: const Offset(0, 3),
+                  //           ),
+                  //         ],
+                  //       ),
+                  //       child: Material(
+                  //         color: Colors.transparent,
+                  //         child: InkWell(
+                  //           borderRadius: BorderRadius.circular(
+                  //             micButtonSize * 0.35,
+                  //           ),
+                  //           onTap:
+                  //               (_aiController.userSpeechText.isNotEmpty &&
+                  //                   !_aiController.isProcessingAI)
+                  //               ? () => _aiController.processUserInput(
+                  //                   _aiController.userSpeechText,
+                  //                 )
+                  //               : null,
+                  //           child: _aiController.isProcessingAI
+                  //               ? Center(
+                  //                   child: SizedBox(
+                  //                     width: micButtonSize * 0.2,
+                  //                     height: micButtonSize * 0.2,
+                  //                     child: CircularProgressIndicator(
+                  //                       strokeWidth: 2,
+                  //                       valueColor:
+                  //                           AlwaysStoppedAnimation<Color>(
+                  //                             Colors.white,
+                  //                           ),
+                  //                     ),
+                  //                   ),
+                  //                 )
+                  //               : Icon(
+                  //                   Icons.send,
+                  //                   color: Colors.white,
+                  //                   size: micButtonSize * 0.25,
+                  //                 ),
+                  //         ),
+                  //       ),
+                  //     ),
+                  //   ),
+                  if (_aiController.userSpeechText.trim().isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: Container(
@@ -659,14 +610,31 @@ class _IntegratedConversationScreenState
                             borderRadius: BorderRadius.circular(
                               micButtonSize * 0.35,
                             ),
+                            // onTap:
+                            //     (!_aiController.isProcessingAI &&
+                            //         _aiController.userSpeechText
+                            //             .trim()
+                            //             .isNotEmpty)
+                            //     ? () {
+                            //         final input = _aiController.userSpeechText
+                            //             .trim();
+                            //         _aiController.processUserInput(input);
+                            //       }
                             onTap:
-                                (_aiController.userSpeechText.isNotEmpty &&
-                                    !_aiController.isProcessingAI)
-                                ? () => _aiController
-                                      .processUserInputWithAssessment(
-                                        _aiController.userSpeechText,
-                                      )
+                                (!_aiController.isProcessingAI &&
+                                    _aiController.userSpeechText
+                                        .trim()
+                                        .isNotEmpty)
+                                ? () async {
+                                    final input = _aiController.userSpeechText
+                                        .trim();
+                                    await _aiController.processUserInput(input);
+                                    setState(
+                                      () {},
+                                    ); // Optional: force UI refresh in case
+                                  }
                                 : null,
+
                             child: _aiController.isProcessingAI
                                 ? Center(
                                     child: SizedBox(
@@ -736,6 +704,30 @@ class _IntegratedConversationScreenState
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Menu button
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surface.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(25),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      onPressed: () => _showMenuDialog(),
+                      icon: Icon(
+                        Icons.restaurant_menu,
+                        color: AppColors.primary,
+                        size: screenSize.width * 0.06,
+                      ),
+                      tooltip: 'View Menu',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   // Reset button
                   Container(
                     decoration: BoxDecoration(
@@ -760,31 +752,7 @@ class _IntegratedConversationScreenState
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // End Conversation button
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.surface.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(25),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withOpacity(0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
-                      onPressed: () => _showEndConversationDialog(),
-                      icon: Icon(
-                        Icons.stop,
-                        color: AppColors.primary,
-                        size: screenSize.width * 0.06,
-                      ),
-                      tooltip: 'End Conversation',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Back button
+                  // Back button with changed icon
                   Container(
                     decoration: BoxDecoration(
                       color: AppColors.surface.withOpacity(0.9),
@@ -800,7 +768,7 @@ class _IntegratedConversationScreenState
                     child: IconButton(
                       onPressed: () => _showExitDialog(),
                       icon: Icon(
-                        Icons.arrow_back,
+                        Icons.home,
                         color: AppColors.primary,
                         size: screenSize.width * 0.06,
                       ),
@@ -878,6 +846,64 @@ class _IntegratedConversationScreenState
     );
   }
 
+  void _showMenuDialog() async {
+    try {
+      // Load menu data
+      final menu = await MenuService.instance.loadMenu();
+      final menuText = MenuService.instance.formatMenuForDisplay();
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.restaurant_menu, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${menu.restaurantName} Menu',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Container(
+            width: double.maxFinite,
+            constraints: const BoxConstraints(maxHeight: 400),
+            child: SingleChildScrollView(
+              child: Text(
+                menuText,
+                style: const TextStyle(fontSize: 14, height: 1.4),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      // Show error if menu loading fails
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load menu: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _showExitDialog() {
     showDialog(
       context: context,
@@ -916,6 +942,31 @@ class _IntegratedConversationScreenState
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showFinishTrainingDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Training Complete!'),
+          content: const Text(
+            'Great job! You successfully completed your training. Would you like to finish and see your feedback?',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _aiController.finishTrainingAndShowFeedback();
+              },
+              child: const Text('Finish Training'),
             ),
           ],
         );
