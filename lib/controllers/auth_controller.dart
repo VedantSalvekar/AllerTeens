@@ -41,6 +41,23 @@ class AuthState {
   }
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AuthState &&
+          runtimeType == other.runtimeType &&
+          user == other.user &&
+          isLoading == other.isLoading &&
+          error == other.error &&
+          isInitialized == other.isInitialized;
+
+  @override
+  int get hashCode =>
+      user.hashCode ^
+      isLoading.hashCode ^
+      error.hashCode ^
+      isInitialized.hashCode;
+
+  @override
   String toString() {
     return 'AuthState(user: $user, isLoading: $isLoading, error: $error, isInitialized: $isInitialized)';
   }
@@ -59,54 +76,83 @@ class AuthController extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true);
 
     try {
-      // Listen to auth state changes
-      _authService.authStateChanges.listen((User? user) async {
-        print(
-          '🔄 [AUTH_CONTROLLER] Auth state changed: ${user?.email ?? 'null'}',
-        );
-        if (user != null) {
-          // Get user model from Firestore with retry logic
-          UserModel? userModel = await _authService.getCurrentUserModel();
-
-          // Retry if user not found (might be a race condition)
-          if (userModel == null) {
-            print('⚠️ [AUTH_CONTROLLER] User model not found, retrying...');
-            await Future.delayed(const Duration(milliseconds: 1000));
-            userModel = await _authService.getCurrentUserModel();
-          }
-
-          // If still null, create a basic user model from Firebase Auth
-          if (userModel == null) {
+      // Listen to auth state changes with error handling
+      _authService.authStateChanges.listen(
+        (User? user) async {
+          try {
             print(
-              '⚠️ [AUTH_CONTROLLER] Creating basic user model from Firebase Auth...',
+              '🔄 [AUTH_CONTROLLER] Auth state changed: ${user?.email ?? 'null'}',
             );
-            userModel = UserModel.fromFirebaseUser(
-              uid: user.uid,
-              email: user.email!,
-              displayName: user.displayName,
-              photoUrl: user.photoURL,
-              isEmailVerified: user.emailVerified,
+
+            if (user != null) {
+              print('🔄 [AUTH_CONTROLLER] User signed in, updating state...');
+              // Get user model from Firestore with retry logic
+              UserModel? userModel = await _authService.getCurrentUserModel();
+
+              // Retry if user not found (might be a race condition)
+              if (userModel == null) {
+                print('⚠️ [AUTH_CONTROLLER] User model not found, retrying...');
+                await Future.delayed(const Duration(milliseconds: 1000));
+                userModel = await _authService.getCurrentUserModel();
+              }
+
+              // If still null, create a basic user model from Firebase Auth
+              if (userModel == null) {
+                print(
+                  '⚠️ [AUTH_CONTROLLER] Creating basic user model from Firebase Auth...',
+                );
+                userModel = UserModel.fromFirebaseUser(
+                  uid: user.uid,
+                  email: user.email!,
+                  displayName: user.displayName,
+                  photoUrl: user.photoURL,
+                  isEmailVerified: user.emailVerified,
+                );
+              }
+
+              state = state.copyWith(
+                user: userModel,
+                isLoading: false,
+                error: null,
+                isInitialized: true,
+              );
+              print(
+                '✅ [AUTH_CONTROLLER] State updated for login: ${userModel.email}',
+              );
+            } else {
+              print('🔄 [AUTH_CONTROLLER] User signed out, updating state...');
+              // ✅ FORCE: Create completely new state object to ensure Riverpod detects change
+              final newState = AuthState(
+                user: null,
+                isLoading: false,
+                error: null,
+                isInitialized: true,
+              );
+              state = newState;
+              print(
+                '✅ [AUTH_CONTROLLER] State updated for logout - new state: $newState',
+              );
+            }
+          } catch (e) {
+            print('❌ [AUTH_CONTROLLER] Error in auth state listener: $e');
+            state = state.copyWith(
+              isLoading: false,
+              error: 'Authentication error: $e',
+              isInitialized: true,
             );
           }
-
+        },
+        onError: (error) {
+          print('❌ [AUTH_CONTROLLER] Auth stream error: $error');
           state = state.copyWith(
-            user: userModel,
             isLoading: false,
-            error: null,
+            error: 'Authentication stream error: $error',
             isInitialized: true,
           );
-        } else {
-          print('🔄 [AUTH_CONTROLLER] User signed out, updating state...');
-          state = state.copyWith(
-            user: null,
-            isLoading: false,
-            error: null,
-            isInitialized: true,
-          );
-          print('✅ [AUTH_CONTROLLER] State updated for logout');
-        }
-      });
+        },
+      );
     } catch (e) {
+      print('❌ [AUTH_CONTROLLER] Failed to initialize auth listener: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to initialize authentication: $e',
@@ -247,18 +293,24 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// Sign out
   Future<void> signOut() async {
+    // ✅ PREVENT: Don't allow multiple simultaneous logout calls
+    if (state.isLoading) {
+      print('⚠️ [AUTH] Sign out already in progress, ignoring...');
+      return;
+    }
+
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       print('🔵 [AUTH] Calling auth service sign out...');
       await _authService.signOut();
-      state = state.copyWith(
-        error: null,
-        isLoading: false,
-        user: null,
-        isInitialized: true,
-      );
+
+      // ✅ FORCE: Add small delay to ensure Firebase state propagates
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      print('✅ [AUTH] Sign out completed, waiting for auth state listener...');
     } catch (e) {
+      print('❌ [AUTH] Sign out failed: $e');
       state = state.copyWith(isLoading: false, error: 'Failed to sign out: $e');
     }
   }
@@ -323,26 +375,6 @@ class AuthController extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to update profile: $e',
-      );
-    }
-  }
-
-  /// Delete user account
-  Future<void> deleteAccount() async {
-    state = state.copyWith(isLoading: true, error: null);
-
-    try {
-      final result = await _authService.deleteAccount();
-
-      if (result.isSuccess) {
-        state = state.copyWith(user: null, isLoading: false, error: null);
-      } else {
-        state = state.copyWith(isLoading: false, error: result.error);
-      }
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Failed to delete account: $e',
       );
     }
   }

@@ -194,7 +194,6 @@ class SuccessMessages {
   static const String emailVerificationSent =
       'Verification email sent. Please check your inbox.';
   static const String profileUpdated = 'Profile updated successfully.';
-  static const String accountDeleted = 'Account deleted successfully.';
 }
 
 /// Route names

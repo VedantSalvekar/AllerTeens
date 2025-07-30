@@ -317,26 +317,6 @@ class AuthService {
     }
   }
 
-  /// Delete user account
-  Future<AuthResult> deleteAccount() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        return AuthResult.failure('No user is currently signed in');
-      }
-
-      // Delete user document from Firestore
-      await _usersCollection.doc(user.uid).delete();
-
-      // Delete Firebase Auth user
-      await user.delete();
-
-      return AuthResult.success(null);
-    } catch (e) {
-      return AuthResult.failure('Failed to delete account: $e');
-    }
-  }
-
   /// Save user to Firestore with merge option to prevent overwriting
   Future<void> _saveUserToFirestore(
     UserModel userModel, {

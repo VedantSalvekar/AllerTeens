@@ -22,8 +22,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  bool _rememberMe = false;
-
   @override
   void dispose() {
     _emailController.dispose();
@@ -60,7 +58,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 20),
                 _buildPasswordField(),
                 const SizedBox(height: 12),
-                _buildRememberMeAndForgotPassword(),
+                _buildForgotPasswordLink(),
                 const SizedBox(height: 32),
                 _buildLoginButton(authState, authController),
                 const SizedBox(height: 24),
@@ -128,37 +126,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildRememberMeAndForgotPassword() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Checkbox(
-              value: _rememberMe,
-              onChanged: (value) {
-                setState(() {
-                  _rememberMe = value ?? false;
-                });
-              },
-              activeColor: AppColors.primary,
-            ),
-            const Text('Remember me', style: AppTextStyles.bodyText2),
-          ],
-        ),
-        TextButton(
-          onPressed: () {
-            _showForgotPasswordDialog();
-          },
-          child: Text(
-            'Forgot Password?',
-            style: AppTextStyles.bodyText2.copyWith(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w600,
-            ),
+  Widget _buildForgotPasswordLink() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        onPressed: () {
+          _showForgotPasswordDialog();
+        },
+        child: Text(
+          'Forgot Password?',
+          style: AppTextStyles.bodyText2.copyWith(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
           ),
         ),
-      ],
+      ),
     );
   }
 

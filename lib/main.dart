@@ -25,21 +25,94 @@ void main() async {
   runApp(const ProviderScope(child: MyApp()));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> {
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
   Widget build(BuildContext context) {
+    // ✅ LISTEN: React to auth state changes and navigate accordingly
+    ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      print(
+        '🔄 [MY_APP] Auth state changed: ${previous?.isAuthenticated ?? 'null'} -> ${next.isAuthenticated}',
+      );
+      print(
+        '🔄 [MY_APP] Auth state details: prev=${previous?.user?.email ?? 'null'}, next=${next.user?.email ?? 'null'}, initialized=${next.isInitialized}',
+      );
+
+      // ✅ CHECK: Force navigation on any meaningful auth change
+      final shouldNavigate =
+          next.isInitialized &&
+          (previous?.isAuthenticated != next.isAuthenticated ||
+              previous?.user?.email != next.user?.email ||
+              (previous?.user?.isEmailVerified != next.user?.isEmailVerified) ||
+              (previous?.user?.allergies.length !=
+                  next.user?.allergies.length));
+
+      if (shouldNavigate) {
+        final navigator = navigatorKey.currentState;
+        if (navigator != null) {
+          print('🔄 [MY_APP] Triggering navigation due to auth state change');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            // Clear the entire stack and navigate to appropriate screen
+            if (next.isAuthenticated && next.user != null) {
+              final user = next.user!;
+              print('🔄 [MY_APP] User authenticated: ${user.email}');
+
+              // Determine which screen to navigate to
+              Widget targetScreen;
+              if (!user.isEmailVerified) {
+                print(
+                  '🔄 [MY_APP] Email not verified, navigating to EmailVerificationScreen',
+                );
+                targetScreen = const EmailVerificationScreen();
+              } else if (user.allergies.isEmpty) {
+                print(
+                  '🔄 [MY_APP] No allergies set, navigating to AllergySelectionScreen',
+                );
+                targetScreen = const AllergySelectionScreen();
+              } else {
+                print('🔄 [MY_APP] User fully set up, navigating to HomeView');
+                targetScreen = const HomeView();
+              }
+
+              navigator.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => targetScreen),
+                (route) => false,
+              );
+            } else {
+              print(
+                '🔄 [MY_APP] User not authenticated, navigating to OnboardingScreen',
+              );
+              navigator.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                (route) => false,
+              );
+            }
+          });
+        }
+      } else {
+        print('🔄 [MY_APP] No navigation needed - conditions not met');
+      }
+    });
+
     return MaterialApp(
       title: AppConstants.appName,
       theme: AppTheme.lightTheme,
+      navigatorKey: navigatorKey,
       home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
-/// Wrapper widget that handles authentication state and navigation
+/// Wrapper widget that shows the initial screen based on auth state
 class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
@@ -47,27 +120,40 @@ class AuthWrapper extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authControllerProvider);
 
+    // ✅ DEBUG: Log auth state changes for debugging
+    print(
+      '🔄 [AUTH_WRAPPER] Building with state: isAuth=${authState.isAuthenticated}, isInit=${authState.isInitialized}, isLoading=${authState.isLoading}, user=${authState.user?.email ?? 'null'}',
+    );
+
     // Show loading screen while initializing
     if (!authState.isInitialized) {
+      print('🔄 [AUTH_WRAPPER] Showing loading screen - not initialized');
       return const LoadingScreen();
     }
 
-    // Handle navigation based on auth state
+    // Handle initial screen based on auth state
     if (!authState.isAuthenticated) {
+      print('🔄 [AUTH_WRAPPER] Showing onboarding - not authenticated');
       return const OnboardingScreen();
     }
 
     final user = authState.user!;
+    print(
+      '🔄 [AUTH_WRAPPER] User authenticated: ${user.email}, emailVerified=${user.isEmailVerified}, allergies=${user.allergies.length}',
+    );
 
     // User is authenticated, determine which screen to show
     if (!user.isEmailVerified) {
+      print('🔄 [AUTH_WRAPPER] Showing email verification screen');
       return const EmailVerificationScreen();
     }
 
     if (user.allergies.isEmpty) {
+      print('🔄 [AUTH_WRAPPER] Showing allergy selection screen');
       return const AllergySelectionScreen();
     }
 
+    print('🔄 [AUTH_WRAPPER] Showing home view');
     return const HomeView();
   }
 }

@@ -11,6 +11,7 @@ import '../integrated_conversation/integrated_conversation_screen.dart';
 import '../symptom_tracking/symptom_form_screen.dart';
 import '../symptom_tracking/logs_screen.dart';
 import '../pen_reminder/pen_reminder_dialog.dart';
+import '../auth/onboarding_screen.dart';
 
 /// Home screen with custom navigation and greeting
 class HomeView extends ConsumerStatefulWidget {
@@ -482,13 +483,38 @@ class _HomeViewState extends ConsumerState<HomeView> {
               },
             ),
             // Logout option
-            ListTile(
-              leading: const Icon(Icons.logout, color: AppColors.error),
-              title: const Text('Logout'),
-              onTap: () async {
-                Navigator.pop(context);
-                // Sign out and let auth state listener handle navigation
-                await ref.read(authControllerProvider.notifier).signOut();
+            Consumer(
+              builder: (context, ref, child) {
+                final authState = ref.watch(authControllerProvider);
+                return ListTile(
+                  leading: const Icon(Icons.logout, color: AppColors.error),
+                  title: const Text('Logout'),
+                  enabled: !authState.isLoading, // Disable during logout
+                  onTap: authState.isLoading
+                      ? null
+                      : () async {
+                          Navigator.pop(context);
+                          print('🔵 [HOME] Logout button clicked');
+
+                          // Sign out
+                          await ref
+                              .read(authControllerProvider.notifier)
+                              .signOut();
+
+                          // ✅ FORCE: Manual navigation to onboarding after logout
+                          if (context.mounted) {
+                            print(
+                              '🔄 [HOME] Manually navigating to OnboardingScreen after logout',
+                            );
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (_) => const OnboardingScreen(),
+                              ),
+                              (route) => false,
+                            );
+                          }
+                        },
+                );
               },
             ),
           ],
