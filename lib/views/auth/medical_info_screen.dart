@@ -290,7 +290,7 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
           controller: _emergencyContactNameController,
           focusNode: _emergencyContactNameFocus,
           label: 'Contact Name',
-          hint: 'e.g., Mom, Dad, Guardian',
+          //hint: 'e.g., Mom, Dad, Guardian',
           // icon: HugeIcons.strokeRoundedUser,
           validator: (value) =>
               ValidationPatterns.validateRequired(value, 'Contact name'),
@@ -303,7 +303,7 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
           controller: _emergencyContactPhoneController,
           focusNode: _emergencyContactPhoneFocus,
           label: 'Phone Number',
-          hint: 'e.g., (555) 123-4567',
+          //hint: 'e.g., (555) 123-4567',
           //   icon: HugeIcons.strokeRoundedUser,
           keyboardType: TextInputType.phone,
           validator: (value) {
@@ -327,7 +327,7 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
           controller: _emergencyContactRelationshipController,
           focusNode: _emergencyContactRelationshipFocus,
           label: 'Relationship',
-          hint: 'e.g., Parent, Guardian, Friend',
+          //hint: 'e.g., Parent, Guardian, Friend',
           // icon: HugeIcons.strokeRoundedUser,
           validator: (value) =>
               ValidationPatterns.validateRequired(value, 'Relationship'),
@@ -407,7 +407,7 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
     required TextEditingController controller,
     required FocusNode focusNode,
     required String label,
-    required String hint,
+    // required String hint,
     // required IconData icon,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
@@ -441,7 +441,7 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
             keyboardType: keyboardType,
             validator: validator,
             decoration: InputDecoration(
-              hintText: hint,
+              //hintText: hint,
               hintStyle: TextStyle(
                 fontSize: 14,
                 color: AppColors.textSecondary,
@@ -526,6 +526,14 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
     }
 
     try {
+      // Get fresh user data from Firestore to preserve allergies
+      final authService = ref.read(authServiceProvider);
+      final freshUser = await authService.getCurrentUserModel();
+
+      if (freshUser == null) {
+        throw Exception('Unable to get current user data');
+      }
+
       // Prepare medical information
       final medicalInfo = {
         'medication': {
@@ -540,8 +548,8 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
         },
       };
 
-      // Update user model with medical information
-      final updatedUser = authState.user!.copyWith(
+      // Update user model with medical information, preserving allergies
+      final updatedUser = freshUser.copyWith(
         medicalInfo: medicalInfo,
         updatedAt: DateTime.now(),
       );
@@ -549,7 +557,6 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
       await authController.updateUserProfile(updatedUser);
       _navigateToHome(context);
     } catch (e) {
-      print('💥 [MEDICAL_INFO_SCREEN] Exception during save: $e');
       _showErrorSnackBar(
         context,
         'An unexpected error occurred. Please try again.',
