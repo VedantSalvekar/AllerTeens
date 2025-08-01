@@ -12,6 +12,9 @@ import '../symptom_tracking/symptom_form_screen.dart';
 import '../symptom_tracking/logs_screen.dart';
 import '../pen_reminder/pen_reminder_dialog.dart';
 import '../auth/onboarding_screen.dart';
+import '../learn/learn_screen.dart';
+import '../profile/profile_screen.dart';
+import '../../services/emergency_service.dart';
 
 /// Home screen with custom navigation and greeting
 class HomeView extends ConsumerStatefulWidget {
@@ -103,6 +106,13 @@ class _HomeViewState extends ConsumerState<HomeView> {
               'Log',
               isSpecial: false,
             ),
+            _buildNavItem(
+              3,
+              null, // Will use Material icon instead
+              'Learn',
+              isSpecial: false,
+              useMaterialIcon: Icons.library_books,
+            ),
           ],
         ),
       ),
@@ -117,6 +127,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
         return _buildAIPage();
       case 2:
         return _buildLogPage();
+      case 3:
+        return _buildLearnPage();
       default:
         return _buildHomePage(firstName);
     }
@@ -135,6 +147,32 @@ class _HomeViewState extends ConsumerState<HomeView> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  // Emergency call button
+                  GestureDetector(
+                    onTap: () => _makeEmergencyCall(context),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.error,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.error.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.phone,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
                   // Notification icon
                   GestureDetector(
                     onTap: () => _showPenReminderDialog(context),
@@ -376,12 +414,17 @@ class _HomeViewState extends ConsumerState<HomeView> {
     return const LogsScreen();
   }
 
+  Widget _buildLearnPage() {
+    return const LearnScreen();
+  }
+
   /// Build navigation item
   Widget _buildNavItem(
     int index,
-    String iconPath,
+    String? iconPath,
     String label, {
     bool isSpecial = false,
+    IconData? useMaterialIcon,
   }) {
     final isSelected = _selectedIndex == index;
     final iconSize = isSpecial ? 36.0 : 24.0;
@@ -409,12 +452,22 @@ class _HomeViewState extends ConsumerState<HomeView> {
             Container(
               width: containerSize,
               height: containerSize,
-              child: Image.asset(
-                iconPath,
-                color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                width: iconSize,
-                height: iconSize,
-              ),
+              child: useMaterialIcon != null
+                  ? Icon(
+                      useMaterialIcon,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
+                      size: iconSize,
+                    )
+                  : Image.asset(
+                      iconPath!,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
+                      width: iconSize,
+                      height: iconSize,
+                    ),
             ),
             const SizedBox(height: 4),
             // Label
@@ -438,6 +491,192 @@ class _HomeViewState extends ConsumerState<HomeView> {
       context: context,
       barrierDismissible: false,
       builder: (context) => const PenReminderDialog(),
+    );
+  }
+
+  /// Make emergency call to user's emergency contact
+  Future<void> _makeEmergencyCall(BuildContext context) async {
+    final authState = ref.read(authControllerProvider);
+    final user = authState.user;
+
+    if (user == null) {
+      _showErrorSnackBar(
+        context,
+        'User not found. Please try logging in again.',
+      );
+      return;
+    }
+
+    // Extract emergency contact from medicalInfo
+    final medicalInfo = user.medicalInfo;
+    if (medicalInfo == null) {
+      _showErrorSnackBar(
+        context,
+        'No medical information found. Please complete your profile setup.',
+      );
+      return;
+    }
+
+    final emergencyContact =
+        medicalInfo['emergencyContact'] as Map<String, dynamic>?;
+    if (emergencyContact == null) {
+      _showErrorSnackBar(
+        context,
+        'No emergency contact found. Please update your medical information.',
+      );
+      return;
+    }
+
+    final phoneNumber = emergencyContact['phone'] as String?;
+    if (phoneNumber == null || phoneNumber.trim().isEmpty) {
+      _showErrorSnackBar(context, 'Emergency contact phone number not found.');
+      return;
+    }
+
+    final contactName = emergencyContact['name'] as String?;
+
+    // Show confirmation dialog
+    final shouldCall = await _showCallConfirmationDialog(
+      context,
+      contactName ?? 'Emergency Contact',
+      phoneNumber,
+    );
+
+    if (shouldCall == true) {
+      // Make the call using EmergencyService
+      final success = await EmergencyService.callEmergencyContact(phoneNumber);
+
+      if (!success) {
+        _showErrorSnackBar(
+          context,
+          'Unable to make phone call. Please check your device settings.',
+        );
+      }
+    }
+  }
+
+  /// Show confirmation dialog before making emergency call
+  Future<bool?> _showCallConfirmationDialog(
+    BuildContext context,
+    String contactName,
+    String phoneNumber,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.phone, color: AppColors.error, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Emergency Call'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Call your emergency contact?',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.grey.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.person,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          contactName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.phone,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          EmergencyService.formatPhoneNumber(phoneNumber),
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Call Now'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show error snackbar
+  void _showErrorSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
     );
   }
 
@@ -470,7 +709,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
               title: const Text('Profile'),
               onTap: () {
                 Navigator.pop(context);
-                // Navigate to profile screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileScreen(),
+                  ),
+                );
               },
             ),
             // Settings option
