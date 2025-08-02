@@ -1,13 +1,12 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/training_assessment.dart';
 import '../models/game_state.dart';
+import '../models/scenario_config.dart';
 import '../core/config/app_config.dart';
 import 'openai_dialogue_service.dart';
 import '../models/scenario_models.dart';
-import '../models/user_model.dart';
 import 'menu_service.dart';
 
 /// Advanced assessment engine that analyzes AI conversations for training effectiveness
@@ -22,9 +21,23 @@ class AssessmentEngine {
     required DateTime sessionStart,
     required DateTime sessionEnd,
     required ConversationContext conversationContext,
+    ScenarioConfig? scenarioConfig,
   }) async {
     try {
-      // ENHANCED BEGINNER ASSESSMENT - Focus on key skills:
+      // Use scenario-specific assessment if available
+      if (scenarioConfig != null) {
+        return await _assessWithScenarioConfig(
+          conversationTurns,
+          playerProfile,
+          scenarioId,
+          sessionStart,
+          sessionEnd,
+          conversationContext,
+          scenarioConfig,
+        );
+      }
+
+      // FALLBACK: ENHANCED BEGINNER ASSESSMENT - Focus on key skills:
       // 1. Did they mention their allergies? (0-70 points)
       // 2. Did they order safe food? (0-30 points)
       // 3. Did they ask about ingredients? (+5 bonus points)
@@ -42,18 +55,11 @@ class AssessmentEngine {
       // Load menu for enhanced safety checking
       await MenuService.instance.loadMenu();
 
-      // Allergy disclosure detection: check all turns and context
-      final allergyDisclosed =
-          conversationContext.allergiesDisclosed ||
-          conversationTurns.any(
-            (turn) =>
-                turn.detectedAllergies.isNotEmpty ||
-                (turn.userInput.toLowerCase().contains('allergy') ||
-                    turn.userInput.toLowerCase().contains('allergic')),
-          );
+      // Check if allergies were disclosed through context or conversation analysis
 
       // FIXED: Use conversation context state if available, otherwise fall back to text analysis
-      if (conversationContext != null) {
+      if (conversationContext.allergiesDisclosed ||
+          conversationContext.selectedDish != null) {
         // Use the reliable conversation context state
         mentionedAllergies = conversationContext.allergiesDisclosed;
         selectedDish = conversationContext.selectedDish;
@@ -138,7 +144,6 @@ class AssessmentEngine {
 
         // Check for order correction (if they initially ordered unsafe, then changed)
         String? firstOrder;
-        String? finalOrder;
         for (final turn in conversationTurns) {
           final userInput = turn.userInput.toLowerCase();
           if ((userInput.contains('i\'ll have') ||
@@ -152,7 +157,6 @@ class AssessmentEngine {
                   userInput.contains('different')) &&
               (userInput.contains('i\'ll have') ||
                   userInput.contains('i want'))) {
-            finalOrder = selectedDish;
             correctedUnsafeOrder = true;
             break;
           }
@@ -836,6 +840,14 @@ Respond with JSON only:
       politenessScore: 8,
       completionBonus: 3,
       improvementBonus: 0,
+      crossContaminationScore: 0,
+      hiddenAllergenScore: 0,
+      preparationMethodScore: 0,
+      specificIngredientScore: 0,
+      missedActions: ['Unable to assess - system error'],
+      earnedBonuses: [],
+      detailedScores: {},
+      isAdvancedLevel: false,
       totalScore: 50,
       overallGrade: 'C',
       strengths: ['Completed the conversation'],
@@ -1153,5 +1165,611 @@ Respond with JSON only:
     };
 
     return pluralMappings[normalized] ?? normalized;
+  }
+
+  /// Scenario-aware assessment using configuration rules
+  Future<AssessmentResult> _assessWithScenarioConfig(
+    List<ConversationTurn> conversationTurns,
+    PlayerProfile playerProfile,
+    String scenarioId,
+    DateTime sessionStart,
+    DateTime sessionEnd,
+    ConversationContext conversationContext,
+    ScenarioConfig scenarioConfig,
+  ) async {
+    final scoringRules = scenarioConfig.scoringRules;
+    int totalScore = 0;
+    List<String> strengths = [];
+    List<String> improvements = [];
+    Map<String, int> scores = {};
+
+    // Apply base scoring rules
+    for (final entry in scoringRules.basePoints.entries) {
+      final criterion = entry.key;
+      final maxPoints = entry.value;
+      int earnedPoints = 0;
+
+      switch (criterion) {
+        case 'allergy_disclosure':
+          if (conversationContext.allergiesDisclosed) {
+            earnedPoints = maxPoints;
+            strengths.add('Clear allergy disclosure');
+          } else {
+            improvements.add('Remember to disclose allergies early');
+          }
+          break;
+
+        case 'safe_food_order':
+          if (conversationContext.selectedDish != null) {
+            debugPrint(
+              '🍽️ [SCORING] Checking safe food for dish: "${conversationContext.selectedDish}"',
+            );
+            // Load menu for advanced safety checking
+            await MenuService.instance.loadMenu();
+            final menuItem = MenuService.instance.findItemByName(
+              conversationContext.selectedDish!,
+            );
+            debugPrint(
+              '🍽️ [SCORING] Found menu item: ${menuItem?.name ?? "NOT FOUND"}',
+            );
+            if (menuItem != null) {
+              final isSafe = MenuService.instance.isItemSafeForUser(
+                menuItem,
+                playerProfile.allergies,
+              );
+              debugPrint(
+                '🍽️ [SCORING] Is safe for allergies ${playerProfile.allergies}: $isSafe',
+              );
+              if (isSafe) {
+                earnedPoints = maxPoints;
+                strengths.add('Selected safe food option');
+                debugPrint(
+                  '🍽️ [SCORING] ✅ Awarded $maxPoints points for safe food selection',
+                );
+              } else {
+                improvements.add(
+                  'Ordered unsafe food - always check ingredients',
+                );
+                debugPrint('🍽️ [SCORING] ❌ No points - unsafe food selected');
+              }
+            } else {
+              debugPrint(
+                '🍽️ [SCORING] ❌ Could not find menu item for "${conversationContext.selectedDish}" - no points awarded',
+              );
+            }
+          } else {
+            debugPrint(
+              '🍽️ [SCORING] ❌ No dish selected - no safe food points awarded',
+            );
+          }
+          break;
+
+        case 'ingredient_questions':
+          bool askedQuestions = conversationTurns.any(
+            (turn) =>
+                turn.userInput.contains('ingredient') ||
+                turn.userInput.contains('contain') ||
+                turn.userInput.contains('?'),
+          );
+          if (askedQuestions) {
+            earnedPoints = maxPoints;
+            strengths.add('Asked about ingredients');
+          } else if (scoringRules.requireIngredientQuestions) {
+            improvements.add('Ask about ingredients in dishes');
+          }
+          break;
+
+        case 'cross_contamination_awareness':
+          bool mentionedCrossContamination = conversationTurns.any(
+            (turn) =>
+                turn.userInput.toLowerCase().contains('cross') ||
+                turn.userInput.toLowerCase().contains('contamination') ||
+                turn.userInput.toLowerCase().contains('preparation') ||
+                turn.userInput.toLowerCase().contains('shared'),
+          );
+          if (mentionedCrossContamination) {
+            earnedPoints = maxPoints;
+            strengths.add('Showed cross-contamination awareness');
+          }
+          break;
+      }
+
+      scores[criterion] = earnedPoints;
+      totalScore += earnedPoints;
+    }
+
+    // Apply bonus points
+    for (final entry in scoringRules.bonusPoints.entries) {
+      final criterion = entry.key;
+      final bonusPoints = entry.value;
+      bool earned = false;
+
+      switch (criterion) {
+        case 'detailed_questions':
+          earned = conversationTurns.any(
+            (turn) =>
+                turn.userInput.length > 50 && turn.userInput.contains('?'),
+          );
+          break;
+
+        case 'preparation_method_inquiry':
+          earned = conversationTurns.any(
+            (turn) =>
+                turn.userInput.toLowerCase().contains('prepare') ||
+                turn.userInput.toLowerCase().contains('cook') ||
+                turn.userInput.toLowerCase().contains('made'),
+          );
+          break;
+
+        case 'kitchen_verification_request':
+          earned = conversationTurns.any(
+            (turn) =>
+                turn.userInput.toLowerCase().contains('kitchen') ||
+                turn.userInput.toLowerCase().contains('chef') ||
+                turn.userInput.toLowerCase().contains('check'),
+          );
+          break;
+
+        case 'alternative_suggestions':
+          earned = conversationTurns.any(
+            (turn) =>
+                turn.userInput.toLowerCase().contains('instead') ||
+                turn.userInput.toLowerCase().contains('alternative') ||
+                turn.userInput.toLowerCase().contains('substitute'),
+          );
+          break;
+      }
+
+      if (earned) {
+        totalScore += bonusPoints;
+        scores[criterion] = bonusPoints;
+        strengths.add('Bonus: ${criterion.replaceAll('_', ' ')}');
+      }
+    }
+
+    // Apply penalties
+    for (final entry in scoringRules.penalties.entries) {
+      final criterion = entry.key;
+      final penaltyPoints = entry.value;
+      bool applied = false;
+
+      switch (criterion) {
+        case 'unsafe_food_order':
+          if (conversationContext.selectedDish != null) {
+            await MenuService.instance.loadMenu();
+            final menuItem = MenuService.instance.findItemByName(
+              conversationContext.selectedDish!,
+            );
+            if (menuItem != null) {
+              final isSafe = MenuService.instance.isItemSafeForUser(
+                menuItem,
+                playerProfile.allergies,
+              );
+              if (!isSafe) {
+                applied = true;
+                improvements.add('Avoid ordering unsafe foods');
+              }
+            }
+          }
+          break;
+
+        case 'no_allergy_disclosure':
+          if (!conversationContext.allergiesDisclosed) {
+            applied = true;
+            improvements.add('Always disclose allergies at the start');
+          }
+          break;
+
+        case 'insufficient_questioning':
+          int questionCount = conversationTurns
+              .where((turn) => turn.userInput.contains('?'))
+              .length;
+          if (scenarioConfig.level == DifficultyLevel.advanced &&
+              questionCount < 3) {
+            applied = true;
+            improvements.add(
+              'Advanced level requires at least 3 detailed questions about ingredients, preparation, and cross-contamination',
+            );
+          }
+          break;
+
+        case 'ignored_hidden_allergens':
+          if (scenarioConfig.level == DifficultyLevel.advanced) {
+            // Check if user failed to ask about hidden allergens for their selected dish
+            if (conversationContext.selectedDish != null) {
+              await MenuService.instance.loadMenu();
+              final menuItem = MenuService.instance.findItemByName(
+                conversationContext.selectedDish!,
+              );
+              if (menuItem != null && menuItem.hiddenAllergens.isNotEmpty) {
+                bool askedAboutHiddenAllergens = conversationTurns.any(
+                  (turn) =>
+                      turn.userInput.toLowerCase().contains('hidden') ||
+                      turn.userInput.toLowerCase().contains('sauce') ||
+                      turn.userInput.toLowerCase().contains('stock') ||
+                      turn.userInput.toLowerCase().contains('preparation') ||
+                      turn.userInput.toLowerCase().contains('made with'),
+                );
+                if (!askedAboutHiddenAllergens) {
+                  applied = true;
+                  improvements.add(
+                    'Advanced level requires asking about hidden allergens in sauces, stocks, and preparation methods',
+                  );
+                }
+              }
+            }
+          }
+          break;
+
+        case 'no_cross_contamination_inquiry':
+          if (scenarioConfig.level == DifficultyLevel.advanced) {
+            bool askedAboutCrossContamination = conversationTurns.any(
+              (turn) =>
+                  turn.userInput.toLowerCase().contains('cross') ||
+                  turn.userInput.toLowerCase().contains('contamination') ||
+                  turn.userInput.toLowerCase().contains('shared') ||
+                  turn.userInput.toLowerCase().contains('separate') ||
+                  turn.userInput.toLowerCase().contains('fryer') ||
+                  turn.userInput.toLowerCase().contains('equipment'),
+            );
+            if (!askedAboutCrossContamination) {
+              applied = true;
+              improvements.add(
+                'Advanced level requires asking about cross-contamination and shared equipment',
+              );
+            }
+          }
+          break;
+
+        case 'no_modification_request':
+          if (scenarioConfig.level == DifficultyLevel.advanced) {
+            // Check if user's selected dish could be modified to be safe
+            if (conversationContext.selectedDish != null) {
+              await MenuService.instance.loadMenu();
+              final menuItem = MenuService.instance.findItemByName(
+                conversationContext.selectedDish!,
+              );
+              if (menuItem != null &&
+                  !MenuService.instance.isItemSafeForUser(
+                    menuItem,
+                    playerProfile.allergies,
+                  ) &&
+                  menuItem.canBeModifiedToSafe) {
+                bool requestedModification = conversationTurns.any(
+                  (turn) =>
+                      turn.userInput.toLowerCase().contains('without') ||
+                      turn.userInput.toLowerCase().contains('modify') ||
+                      turn.userInput.toLowerCase().contains('change') ||
+                      turn.userInput.toLowerCase().contains('substitute') ||
+                      turn.userInput.toLowerCase().contains('alternative') ||
+                      turn.userInput.toLowerCase().contains('skip'),
+                );
+                if (!requestedModification) {
+                  applied = true;
+                  improvements.add(
+                    'Ask about modifying dishes to make them safe when possible',
+                  );
+                }
+              }
+            }
+          }
+          break;
+
+        case 'rushed_decision':
+          if (conversationTurns.length < 3 &&
+              conversationContext.selectedDish != null) {
+            applied = true;
+            improvements.add('Take time to ask questions before ordering');
+          }
+          break;
+      }
+
+      if (applied) {
+        totalScore += penaltyPoints; // penaltyPoints are negative
+        scores[criterion] = penaltyPoints;
+      }
+    }
+
+    // ✅ CRITICAL: Advanced level failure conditions
+    String? failureReason;
+
+    if (scenarioConfig.level == DifficultyLevel.advanced) {
+      // Auto-fail if user orders unsafe food despite having allergies
+      if (conversationContext.selectedDish != null &&
+          conversationContext.allergiesDisclosed) {
+        await MenuService.instance.loadMenu();
+        final menuItem = MenuService.instance.findItemByName(
+          conversationContext.selectedDish!,
+        );
+        if (menuItem != null &&
+            !MenuService.instance.isItemSafeForUser(
+              menuItem,
+              playerProfile.allergies,
+            )) {
+          failureReason =
+              'CRITICAL: Ordered unsafe food despite disclosing allergies. This is extremely dangerous!';
+          totalScore = (totalScore * 0.1).round(); // 90% penalty but not zero
+        }
+      }
+
+      // Heavy penalty if user doesn't disclose allergies at all in advanced scenario
+      if (!conversationContext.allergiesDisclosed) {
+        failureReason =
+            'CRITICAL: Advanced scenarios require proactive allergy disclosure!';
+        totalScore = (totalScore * 0.2).round(); // 80% penalty
+      }
+
+      // Auto-fail if user has insufficient safety questioning
+      int safetyQuestions = conversationTurns.where((turn) {
+        final input = turn.userInput.toLowerCase();
+        return input.contains('cross') ||
+            input.contains('contamination') ||
+            input.contains('shared') ||
+            input.contains('preparation') ||
+            input.contains('allergen') ||
+            input.contains('ingredient') ||
+            input.contains('safe');
+      }).length;
+
+      if (safetyQuestions < 2) {
+        if (failureReason == null) {
+          failureReason =
+              'CRITICAL: Advanced level requires extensive safety questioning!';
+        }
+        totalScore = (totalScore * 0.6).round(); // 40% penalty
+      }
+    }
+
+    // Apply difficulty multiplier
+    totalScore = (totalScore * scenarioConfig.difficultyMultiplier).round();
+
+    // Clamp to appropriate maximum for the scenario level
+    int maxScore = scenarioConfig.level == DifficultyLevel.advanced ? 200 : 100;
+    totalScore = totalScore.clamp(0, maxScore);
+
+    scores['total'] = totalScore;
+
+    // Add failure reason to improvements if it occurred
+    if (failureReason != null) {
+      improvements.insert(0, failureReason);
+    }
+
+    // Generate level-appropriate feedback
+    String feedback = _generateScenarioFeedback(
+      totalScore,
+      strengths,
+      improvements,
+      scenarioConfig,
+    );
+
+    String grade = _calculateGrade(totalScore);
+
+    // Enhanced scoring for advanced level
+    bool isAdvanced = scenarioConfig.level == DifficultyLevel.advanced;
+    List<String> missedActions = [];
+    List<String> earnedBonuses = [];
+
+    // Create detailed scores map with correct structure
+    Map<String, int> detailedScores = Map.from(scores);
+
+    // Track missed critical actions for advanced level (informational only, penalties already applied above)
+    if (isAdvanced) {
+      // Track what actions were missed for display
+      if (!conversationContext.allergiesDisclosed) {
+        missedActions.add('Disclose allergies proactively');
+      }
+      if (!conversationTurns.any(
+        (turn) =>
+            turn.userInput.toLowerCase().contains('ingredient') ||
+            turn.userInput.toLowerCase().contains('contain'),
+      )) {
+        missedActions.add('Ask detailed ingredient questions');
+      }
+      if (!conversationTurns.any(
+        (turn) =>
+            turn.userInput.toLowerCase().contains('preparation') ||
+            turn.userInput.toLowerCase().contains('prepared') ||
+            turn.userInput.toLowerCase().contains('cook') ||
+            turn.userInput.toLowerCase().contains('made'),
+      )) {
+        missedActions.add('Verify preparation methods');
+      }
+      if (!conversationTurns.any(
+        (turn) =>
+            turn.userInput.toLowerCase().contains('hidden') ||
+            turn.userInput.toLowerCase().contains('sauce') ||
+            turn.userInput.toLowerCase().contains('dressing'),
+      )) {
+        missedActions.add('Ask about hidden allergens in sauces/dressings');
+      }
+      if (!conversationTurns.any(
+        (turn) =>
+            turn.userInput.toLowerCase().contains('cross') ||
+            turn.userInput.toLowerCase().contains('contamination') ||
+            turn.userInput.toLowerCase().contains('shared'),
+      )) {
+        missedActions.add('Inquire about cross-contamination risks');
+      }
+
+      // Track bonus actions for advanced
+      if (conversationTurns.any(
+        (turn) =>
+            turn.userInput.toLowerCase().contains('kitchen') ||
+            turn.userInput.toLowerCase().contains('chef'),
+      )) {
+        earnedBonuses.add('Asked to verify with kitchen');
+      }
+      if (conversationTurns.length >= 4) {
+        earnedBonuses.add('Thorough questioning approach');
+      }
+    }
+
+    // The score has already been processed above, no need to re-clamp here
+
+    return AssessmentResult(
+      allergyDisclosureScore: scores['allergy_disclosure'] ?? 0,
+      clarityScore: 8, // Default good clarity
+      proactivenessScore: scores['cross_contamination_awareness'] ?? 0,
+      ingredientInquiryScore: scores['ingredient_questions'] ?? 0,
+      riskAssessmentScore: (scores['safe_food_order'] ?? 0) ~/ 2,
+      confidenceScore: totalScore >= (isAdvanced ? 120 : 70) ? 8 : 5,
+      politenessScore: 8, // Assume good politeness
+      completionBonus: totalScore >= scoringRules.passingScore ? 5 : 0,
+      improvementBonus: 0, // Could be calculated based on previous sessions
+      unsafeOrderPenalty: scores['unsafe_food_order'] ?? 0,
+      crossContaminationScore: scores['cross_contamination_awareness'] ?? 0,
+      hiddenAllergenScore: scores['hidden_allergen_questions'] ?? 0,
+      preparationMethodScore: scores['preparation_method_inquiry'] ?? 0,
+      specificIngredientScore: scores['specific_ingredient_inquiry'] ?? 0,
+      missedActions: missedActions,
+      earnedBonuses: earnedBonuses,
+      detailedScores: detailedScores,
+      isAdvancedLevel: isAdvanced,
+      totalScore: totalScore,
+      overallGrade: grade,
+      strengths: strengths,
+      improvements: improvements,
+      detailedFeedback: feedback,
+      assessedAt: sessionEnd,
+    );
+  }
+
+  String _generateScenarioFeedback(
+    int totalScore,
+    List<String> strengths,
+    List<String> improvements,
+    ScenarioConfig scenarioConfig,
+  ) {
+    final buffer = StringBuffer();
+
+    // Level-specific feedback style
+    switch (scenarioConfig.behaviorRules.feedbackStyle) {
+      case FeedbackStyle.supportive:
+        buffer.write(
+          _generateSupportiveFeedback(totalScore, strengths, improvements),
+        );
+        break;
+      case FeedbackStyle.challenging:
+        buffer.write(
+          _generateChallengingFeedback(totalScore, strengths, improvements),
+        );
+        break;
+      case FeedbackStyle.realistic:
+        buffer.write(
+          _generateRealisticFeedback(totalScore, strengths, improvements),
+        );
+        break;
+      case FeedbackStyle.neutral:
+        buffer.write(
+          _generateNeutralFeedback(totalScore, strengths, improvements),
+        );
+        break;
+    }
+
+    // Add scenario-specific context
+    buffer.write('\n\nScenario: ${scenarioConfig.name}');
+    buffer.write(
+      '\nDifficulty: ${scenarioConfig.level.toString().split('.').last}',
+    );
+    buffer.write(
+      '\nPassing Score: ${scenarioConfig.scoringRules.passingScore}%',
+    );
+
+    return buffer.toString();
+  }
+
+  String _generateSupportiveFeedback(
+    int score,
+    List<String> strengths,
+    List<String> improvements,
+  ) {
+    final buffer = StringBuffer();
+    if (score >= 85) {
+      buffer.write('Excellent work! ');
+    } else if (score >= 70) {
+      buffer.write('Great job! ');
+    } else if (score >= 50) {
+      buffer.write('Good effort! ');
+    } else {
+      buffer.write('Keep practicing - you\'re learning! ');
+    }
+
+    if (strengths.isNotEmpty) {
+      buffer.write('Your strengths: ${strengths.join(", ")}. ');
+    }
+    if (improvements.isNotEmpty) {
+      buffer.write('Areas to focus on: ${improvements.join(", ")}. ');
+    }
+
+    return buffer.toString();
+  }
+
+  String _generateChallengingFeedback(
+    int score,
+    List<String> strengths,
+    List<String> improvements,
+  ) {
+    final buffer = StringBuffer();
+    if (score >= 90) {
+      buffer.write(
+        'Strong performance, but there\'s always room for improvement. ',
+      );
+    } else if (score >= 75) {
+      buffer.write('Solid work, but push yourself further. ');
+    } else if (score >= 60) {
+      buffer.write('Acceptable, but you can do better. ');
+    } else {
+      buffer.write('This needs significant improvement. ');
+    }
+
+    if (improvements.isNotEmpty) {
+      buffer.write('Focus on: ${improvements.join(", ")}. ');
+    }
+    if (strengths.isNotEmpty) {
+      buffer.write('Build on: ${strengths.join(", ")}. ');
+    }
+
+    return buffer.toString();
+  }
+
+  String _generateRealisticFeedback(
+    int score,
+    List<String> strengths,
+    List<String> improvements,
+  ) {
+    final buffer = StringBuffer();
+    if (score >= 85) {
+      buffer.write('Professional-level communication. ');
+    } else if (score >= 70) {
+      buffer.write('Good communication skills demonstrated. ');
+    } else if (score >= 50) {
+      buffer.write('Basic communication achieved. ');
+    } else {
+      buffer.write('Communication needs development. ');
+    }
+
+    if (improvements.isNotEmpty) {
+      buffer.write('Consider: ${improvements.join(", ")}. ');
+    }
+
+    return buffer.toString();
+  }
+
+  String _generateNeutralFeedback(
+    int score,
+    List<String> strengths,
+    List<String> improvements,
+  ) {
+    final buffer = StringBuffer();
+    buffer.write('Score: $score%. ');
+
+    if (strengths.isNotEmpty) {
+      buffer.write('Achieved: ${strengths.join(", ")}. ');
+    }
+    if (improvements.isNotEmpty) {
+      buffer.write('Areas for development: ${improvements.join(", ")}. ');
+    }
+
+    return buffer.toString();
   }
 }

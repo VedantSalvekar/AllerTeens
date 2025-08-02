@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import '../models/game_state.dart';
 import '../models/simulation_step.dart';
+import '../models/scenario_config.dart';
+import '../models/scenario_models.dart';
 import '../core/config/app_config.dart';
 import 'realistic_tts_service.dart';
 import 'menu_service.dart';
@@ -310,13 +310,13 @@ class OpenAIDialogueService {
         ),
         pauseFor: const Duration(
           seconds:
-              3, // Reduced from 10 to 3 seconds for more responsive interaction
+              8, // Increased to 8 seconds to allow for natural pauses in longer sentences
         ),
         listenOptions: SpeechListenOptions(
           partialResults: true,
           cancelOnError: false,
           listenMode: ListenMode
-              .confirmation, // Changed back from dictation to confirmation for cleaner input
+              .dictation, // Changed to dictation mode for better handling of longer sentences
           enableHapticFeedback: false,
           autoPunctuation: true,
         ),
@@ -346,6 +346,15 @@ class OpenAIDialogueService {
     ];
 
     String cleaned = input.toLowerCase().trim();
+
+    // ✅ CRITICAL: If allergies are mentioned, keep the FULL input - don't over-clean
+    if (cleaned.contains('allergic') || cleaned.contains('allergy')) {
+      // Just remove basic TTS interference but keep all allergy information
+      for (final pattern in ttsPatterns) {
+        cleaned = cleaned.replaceAll(pattern, '').trim();
+      }
+      return cleaned.isEmpty ? input.trim() : cleaned;
+    }
 
     // Remove TTS interference patterns
     for (final pattern in ttsPatterns) {
@@ -389,6 +398,13 @@ class OpenAIDialogueService {
       'i\'d like',
       'menu',
       'order',
+      'allergic',
+      'allergy',
+      'i am',
+      'what are',
+      'what',
+      'safe',
+      'options',
     ];
     final sentences = cleaned
         .split(RegExp(r'[.!?]'))
@@ -495,6 +511,7 @@ class OpenAIDialogueService {
     required String scenarioContext,
     ConversationContext? context,
     String? systemPrompt,
+    ScenarioConfig? scenarioConfig,
   }) async {
     try {
       // Use provided context or current context
@@ -509,8 +526,13 @@ class OpenAIDialogueService {
 
       final updatedMessages = [...workingContext.messages, userMessage];
 
-      // Load menu from JSON and get formatted version for AI
-      await MenuService.instance.loadMenu();
+      // Load menu from scenario config or default file
+      if (scenarioConfig?.menuData != null) {
+        await MenuService.instance.loadMenu(menuData: scenarioConfig!.menuData);
+      } else {
+        // Fallback to default menu
+        await MenuService.instance.loadMenu();
+      }
       final menuForAI = MenuService.instance.formatMenuForAI(
         playerProfile.allergies,
       );
@@ -532,12 +554,14 @@ class OpenAIDialogueService {
         workingContext,
       );
 
-      // Build waiter response using the provided systemPrompt
+      // Build waiter response using the provided systemPrompt and scenario behavior rules
       final waiterResponse = await _generateWaiterResponse(
         userInput,
         systemPrompt,
         workingContext,
         menuForAI,
+        scenarioConfig: scenarioConfig,
+        playerProfile: playerProfile,
       );
 
       // Update context based on AI analysis (not phrase matching)
@@ -545,6 +569,7 @@ class OpenAIDialogueService {
         workingContext.copyWith(messages: updatedMessages),
         analysisResponse,
         waiterResponse,
+        userInput, // Add user input parameter
       );
 
       return NPCDialogueResponse(
@@ -563,56 +588,15 @@ class OpenAIDialogueService {
             analysisResponse['conversation_should_end'] ?? false,
       );
     } catch (e) {
-      debugPrint('Error getting OpenAI response: $e');
-      debugPrint('Error details: ${e.toString()}');
-      debugPrint('User input was: $userInput');
-      onError?.call('Failed to get AI response');
-
-      // Generate contextual fallback response based on user input
-      String fallbackResponse;
-      final lowerInput = userInput.toLowerCase();
-
-      if (lowerInput.contains('menu')) {
-        fallbackResponse =
-            "Of course! We have pasta, pizza, salads, grilled chicken, fish & chips, and vegetarian options. What sounds good to you?";
-      } else if (lowerInput.contains('recommend')) {
-        fallbackResponse =
-            "I'd recommend our grilled chicken or pasta - they're very popular! What are you in the mood for?";
-      } else if (lowerInput.contains('allerg') || lowerInput.contains('safe')) {
-        fallbackResponse = "I understand. What would you like to order today?";
-      } else if (lowerInput.contains('order') ||
-          lowerInput.contains('have') ||
-          lowerInput.contains('want')) {
-        fallbackResponse = "Great! What can I get for you?";
-      } else {
-        fallbackResponse = "What can I help you with today?";
-      }
-
-      // Update context manually for fallback
-      final fallbackContext = _currentContext.copyWith(
-        messages: [
-          ..._currentContext.messages,
-          ConversationMessage(
-            role: 'user',
-            content: userInput,
-            timestamp: DateTime.now(),
-          ),
-          ConversationMessage(
-            role: 'assistant',
-            content: fallbackResponse,
-            timestamp: DateTime.now(),
-          ),
-        ],
-        turnCount: _currentContext.turnCount + 1,
-      );
-
+      debugPrint('Error in NPC response generation: $e');
       return NPCDialogueResponse(
-        npcDialogue: fallbackResponse,
-        isPositiveFeedback: true,
+        npcDialogue:
+            "I apologize, but I'm having trouble understanding. Could you please repeat that?",
+        isPositiveFeedback: false,
         confidencePoints: 0,
         detectedAllergies: <String>[],
         followUpPrompt: '',
-        updatedContext: fallbackContext,
+        updatedContext: context ?? _currentContext,
         shouldEndConversation: false,
       );
     }
@@ -635,28 +619,35 @@ class OpenAIDialogueService {
         .join('\n');
 
     // Check if customer ordered unsafe food by checking with MenuService
-    bool orderedUnsafeFood = false;
     if (selectedDish != null) {
       final menuItem = MenuService.instance.findItemByName(selectedDish);
       if (menuItem != null) {
-        orderedUnsafeFood = !MenuService.instance.isItemSafeForUser(
+        final orderedUnsafeFood = !MenuService.instance.isItemSafeForUser(
           menuItem,
           playerProfile.allergies,
+        );
+        // This safety check is used in the system prompt generation
+        debugPrint(
+          '🚨 [SAFETY] Selected dish "$selectedDish" is ${orderedUnsafeFood ? "UNSAFE" : "SAFE"} for user allergies',
         );
       }
     }
 
     return '''
-You are a friendly, professional waiter at a restaurant. This is ALLERGY SAFETY TRAINING.
+You are a restaurant waiter. This is ALLERGY SAFETY TRAINING.
 
 ALLERGY DISCLOSURE STATUS: ${hasDisclosedAllergies ? 'YES - They told you about: $previousAllergies' : 'NO - They haven\'t mentioned allergies yet'}
 ${selectedDish != null ? 'ORDERED DISH: $selectedDish' : 'NO ORDER YET'}
-
-🚨 CRITICAL: You must ONLY mention the specific dishes listed in this menu. DO NOT invent or mention any other foods.
+🚨🚨🚨 ABSOLUTE CRITICAL RULE 🚨🚨🚨
+YOU CAN ONLY MENTION FOODS THAT ARE LISTED IN THE MENU BELOW. 
+NO EXCEPTIONS. NO MADE-UP DISHES. NO GENERIC FOODS.
 
 $menuForAI
 
-⚠️ FORBIDDEN WORDS: Never use these generic terms: "grilled chicken", "pasta", "fish & chips", "salads", "pizza". Use ONLY our actual menu item names listed above.
+🚫 NEVER SAY: "grilled chicken salad", "salmon dish", "chicken breast", "pasta", "fish & chips"
+✅ ONLY SAY: The exact dish names from the menu above (like "Duck Liver Parfait", "Katsu Curry", etc.)
+
+IF YOU MENTION ANY FOOD NOT ON THIS MENU, YOU FAIL THE TEST.
 
 WAITER SAFETY PROTOCOLS:
 1. If customer orders food containing their disclosed allergies → IMMEDIATELY warn them
@@ -664,10 +655,12 @@ WAITER SAFETY PROTOCOLS:
 3. If customer asks about ingredients → Be specific about allergens and hidden allergens
 4. Always prioritize customer safety over sales
 
-EXAMPLE SAFETY RESPONSES:
-- "I need to let you know that the [dish] contains [allergen], which you mentioned you're allergic to. Would you like me to suggest something safer?"
-- "Before I take your order, do you have any food allergies I should know about?"
-- "That dish contains [allergen] and also has hidden [hidden allergen] in the [component]. Given your allergies, I'd recommend [safe alternative] instead."
+EXAMPLE SAFETY RESPONSES (using ONLY menu items):
+- "Thanks for telling me about your peanut allergy! Safe options include Duck Liver Parfait, Tempura Mixed Veggies, and Katsu Curry."
+- "I need to let you know that Satay Chicken Skewers contains peanuts. I'd recommend Duck Liver Parfait instead."
+- "All dishes marked ✅ SAFE in the menu above are good for your allergies."
+
+🚨 REMEMBER: You can ONLY suggest dishes that appear in the menu above!
 
 CRITICAL: If customer orders unsafe food, you MUST warn them before confirming the order.
 
@@ -1158,61 +1151,7 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
       }
     }
 
-    // Patterns that indicate ordering food (not disclosing allergies)
-    final orderingPatterns = [
-      'i\'ll have',
-      'i\'ll take',
-      'i want',
-      'i\'d like',
-      'i choose',
-      'i\'ll order',
-      'i\'ll get',
-      'give me',
-      'have the',
-      'take the',
-      'get the',
-      'that one',
-      'this one',
-      'sounds good',
-      'sounds great',
-      'perfect',
-      'sure',
-      'okay',
-      'fine',
-      'yep',
-      'yup',
-      'alright',
-      'right',
-      'exactly',
-      'that\'s it',
-      'that\'s right',
-      'that\'s what i want',
-      'that\'s good',
-      'that works',
-      'that\'s fine',
-      'that\'s perfect',
-      'let\'s do that',
-      'let\'s go with',
-      'i\'ll do',
-      'i\'ll go with',
-      'i\'ll pick',
-      'i\'ll select',
-      'i\'ll choose',
-      'bring me',
-      'make me',
-      'prepare',
-      'cook',
-      'fix me',
-      'serve me',
-      'deliver',
-    ];
-
-    // Check if user is ordering food - but exclude questions
-    final isOrdering =
-        orderingPatterns.any((pattern) => lowerInput.contains(pattern)) &&
-        !lowerInput.startsWith('what') &&
-        !lowerInput.startsWith('so what') &&
-        !hasAllergyDisclosure; // CRITICAL FIX: Don't consider it ordering if they're disclosing allergies
+    // Note: We prioritize allergy disclosure over ordering patterns
 
     // FIXED: If user mentions allergies, always consider it allergy disclosure regardless of other patterns
     return hasAllergyDisclosure;
@@ -1305,7 +1244,7 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
           lowerInput.contains('${allergyLower}s') ||
           (lowerInput.contains('allerg') &&
               lowerInput.contains(
-                allergyLower.substring(0, min(3, allergyLower.length)),
+                allergyLower.substring(0, math.min(3, allergyLower.length)),
               ))) {
         detectedAllergies.add(allergyLower);
       }
@@ -1621,93 +1560,33 @@ Respond with JSON only:
 ''';
 
     try {
-      final messages = [
-        {'role': 'system', 'content': analysisPrompt},
-        {'role': 'user', 'content': 'Analyze this message.'},
-      ];
+      final response = await _sendOpenAIRequest([
+        {'role': 'user', 'content': analysisPrompt},
+      ]);
 
-      final response = await _sendOpenAIRequest(messages);
       final analysis = jsonDecode(response) as Map<String, dynamic>;
 
-      debugPrint('[AI ANALYSIS] Raw response: $response');
       debugPrint(
         '[AI ANALYSIS] Intent: ${analysis['intent']}, Allergies: ${analysis['mentioned_allergies']}, Food: ${analysis['ordered_food']}',
       );
-      debugPrint('[AI ANALYSIS] User input was: "$userInput"');
 
-      // ✅ CRITICAL FIX: Validate analysis results against expected patterns
-      if (userInput.toLowerCase().contains('menu') ||
-          userInput.toLowerCase().contains('what\'s')) {
-        if (analysis['intent'] != 'question') {
-          debugPrint(
-            '[AI ANALYSIS] ❌ ERROR: Menu question should have intent "question" but got "${analysis['intent']}"',
-          );
-          // Force correct analysis for menu questions
-          analysis['intent'] = 'question';
-          analysis['is_asking_question'] = true;
-          analysis['ordered_food'] = null;
-          analysis['mentioned_allergies'] = [];
-        }
-      }
-
-      // ✅ CRITICAL FIX: Validate allergy detection
-      final lowerInput = userInput.toLowerCase();
-      final hasAllergyPhrase =
-          lowerInput.contains('allergic to') ||
-          lowerInput.contains('i\'m allergic') ||
-          lowerInput.contains('i am allergic') ||
-          lowerInput.contains('can\'t eat') ||
-          lowerInput.contains('cannot eat') ||
-          lowerInput.contains('have an allergy') ||
-          lowerInput.contains('allergy to');
-
-      if (hasAllergyPhrase) {
-        final detectedAllergies =
-            analysis['mentioned_allergies'] as List? ?? [];
-        if (detectedAllergies.isEmpty) {
-          debugPrint(
-            '[AI ANALYSIS] ❌ CRITICAL ERROR: User mentioned allergies but AI missed them!',
-          );
-          debugPrint('[AI ANALYSIS] Input: "$userInput"');
-          debugPrint('[AI ANALYSIS] AI Response: $analysis');
-
-          // Emergency fallback: manual extraction
-          final allergens = <String>[];
-          if (lowerInput.contains('allergic to peanut'))
-            allergens.add('peanuts');
-          if (lowerInput.contains('allergic to nut')) allergens.add('nuts');
-          if (lowerInput.contains('allergic to dairy')) allergens.add('dairy');
-          if (lowerInput.contains('allergic to milk')) allergens.add('milk');
-          if (lowerInput.contains('allergic to shellfish'))
-            allergens.add('shellfish');
-          if (lowerInput.contains('allergic to fish')) allergens.add('fish');
-          if (lowerInput.contains('allergic to egg')) allergens.add('eggs');
-          if (lowerInput.contains('allergic to wheat')) allergens.add('wheat');
-          if (lowerInput.contains('allergic to gluten'))
-            allergens.add('gluten');
-
-          if (allergens.isNotEmpty) {
-            analysis['mentioned_allergies'] = allergens;
-            debugPrint(
-              '[AI ANALYSIS] ✅ FIXED: Manually extracted allergies: $allergens',
-            );
-          }
-        } else {
-          debugPrint(
-            '[AI ANALYSIS] ✅ Allergies correctly detected: $detectedAllergies',
-          );
-        }
+      // Validate allergy detection
+      if (analysis['mentioned_allergies'] != null &&
+          (analysis['mentioned_allergies'] as List).isNotEmpty) {
+        debugPrint(
+          '[AI ANALYSIS] ✅ Allergies correctly detected: ${analysis['mentioned_allergies']}',
+        );
       }
 
       return analysis;
     } catch (e) {
-      debugPrint('Error in AI analysis: $e');
-      // Fallback analysis
+      debugPrint('Error in AI intent analysis: $e');
+      // Fallback analysis based on keywords
       return {
         'intent': 'general_response',
         'mentioned_allergies': <String>[],
         'ordered_food': null,
-        'is_asking_question': userInput.contains('?'),
+        'is_asking_question': false,
         'conversation_should_end': false,
         'confidence': 0.5,
       };
@@ -1719,25 +1598,33 @@ Respond with JSON only:
     String userInput,
     String? systemPrompt,
     ConversationContext context,
-    String menuForAI,
-  ) async {
+    String menuForAI, {
+    ScenarioConfig? scenarioConfig,
+    PlayerProfile? playerProfile,
+  }) async {
     try {
       final messages = <Map<String, String>>[];
 
-      // ✅ FIXED: Always use system prompt with menu data
+      // ✅ ENHANCED: Use system prompt with scenario behavior rules
       if (systemPrompt != null && systemPrompt.isNotEmpty) {
-        messages.add({'role': 'system', 'content': systemPrompt});
+        // Enhance the provided system prompt with scenario-specific behavior
+        String enhancedPrompt = systemPrompt;
+        if (scenarioConfig != null) {
+          enhancedPrompt += _addScenarioBehaviorContext(
+            scenarioConfig,
+            playerProfile,
+            context,
+          );
+        }
+        messages.add({'role': 'system', 'content': enhancedPrompt});
       } else {
-        // ✅ FALLBACK: Create basic system prompt with menu if none provided
-        final fallbackPrompt =
-            '''
-You are a friendly restaurant waiter. Here's our menu:
-
-$menuForAI
-
-When customers ask about the menu, tell them about these specific items with names and prices.
-Always be helpful and answer questions about ingredients and allergens.
-        ''';
+        // ✅ FALLBACK: Create enhanced system prompt with scenario rules if available
+        final fallbackPrompt = _generateEnhancedFallbackPrompt(
+          menuForAI,
+          scenarioConfig,
+          playerProfile,
+          context,
+        );
         messages.add({'role': 'system', 'content': fallbackPrompt});
       }
 
@@ -1763,34 +1650,34 @@ Always be helpful and answer questions about ingredients and allergens.
         waiterResponse = response;
       }
 
-      // ✅ Validate response doesn't contain forbidden generic foods
+      // ✅ TARGETED VALIDATION: Only check for clearly generic/non-specific items
       final forbiddenTerms = [
-        'grilled chicken',
-        'fried chicken',
-        'chicken breast',
-        'chicken tenders',
-        'roasted chicken',
-        'chicken parmesan',
-        'chicken stir-fry',
-        'pasta',
-        'fish & chips',
-        'fish and chips',
-        'pizza',
-        'salads',
+        'grilled chicken salad', // Common AI hallucination
+        'house salad', // Too generic
+        'green salad', // Too generic
+        'caesar salad', // Common hallucination
+        'chicken salad', // Common hallucination
+        'pasta salad', // Common hallucination
+        'our special', // Too vague
+        'chef\'s special', // Too vague
+        'today\'s special', // Too vague
+        'signature dish', // Too vague
         'generic',
       ];
-      final lowerResponse = waiterResponse.toLowerCase();
 
+      final lowerResponse = waiterResponse.toLowerCase();
       for (final term in forbiddenTerms) {
         if (lowerResponse.contains(term)) {
           debugPrint(
-            '❌ [AI RESPONSE] Found forbidden term "$term" in response: "$waiterResponse"',
+            '❌ [AI] FAILED! Mentioned non-menu item "$term" in: "$waiterResponse"',
           );
-          // Force fallback with actual menu items
+          debugPrint('🔄 [AI] Using menu-based fallback instead');
           return _generateMenuBasedFallback(userInput, menuForAI);
         }
       }
 
+      // ✅ Add clear logging of AI response
+      debugPrint('🤖 [AI WAITER SAYS]: "$waiterResponse"');
       return waiterResponse;
     } catch (e) {
       debugPrint('Error generating waiter response: $e');
@@ -1799,9 +1686,174 @@ Always be helpful and answer questions about ingredients and allergens.
     }
   }
 
+  /// ✅ NEW: Add scenario-specific behavior context to system prompt
+  String _addScenarioBehaviorContext(
+    ScenarioConfig scenarioConfig,
+    PlayerProfile? playerProfile,
+    ConversationContext context,
+  ) {
+    final behaviorRules = scenarioConfig.behaviorRules;
+    final level = scenarioConfig.level;
+
+    final buffer = StringBuffer();
+    buffer.writeln('\n\n=== SCENARIO-SPECIFIC BEHAVIOR ===');
+    buffer.writeln('Level: ${level.toString().split('.').last.toUpperCase()}');
+    buffer.writeln(
+      'Guidance Level: ${(behaviorRules.guidanceLevel * 100).round()}%',
+    );
+    buffer.writeln('Patience Level: ${behaviorRules.patienceLevel}/5');
+
+    // Level-specific behavioral adjustments
+    switch (level) {
+      case DifficultyLevel.beginner:
+        buffer.writeln('\nBEGINNER BEHAVIOR:');
+        buffer.writeln('- Be extra patient and encouraging');
+        buffer.writeln('- Offer gentle prompts if customer seems uncertain');
+        buffer.writeln('- Provide reassurance about safety measures');
+        buffer.writeln('- Use positive, supportive language');
+        break;
+
+      case DifficultyLevel.intermediate:
+        buffer.writeln('\nINTERMEDIATE BEHAVIOR:');
+        buffer.writeln('- Be professional but helpful');
+        buffer.writeln('- Provide information when asked');
+        buffer.writeln('- Don\'t over-guide - let customer take initiative');
+        buffer.writeln('- Maintain neutral, service-oriented tone');
+        break;
+
+      case DifficultyLevel.advanced:
+        buffer.writeln('\nADVANCED BEHAVIOR:');
+        buffer.writeln('- Be strictly business-focused with minimal patience');
+        buffer.writeln(
+          '- Expect complete customer self-sufficiency and knowledge',
+        );
+        buffer.writeln(
+          '- Show clear irritation with excessive questioning or hesitation',
+        );
+        buffer.writeln(
+          '- Use terse, professional responses only - no elaboration',
+        );
+        buffer.writeln('- Prioritize service efficiency over customer comfort');
+        buffer.writeln('- Emulate real-world restaurant time pressures');
+        buffer.writeln('- Don\'t offer unsolicited guidance');
+        buffer.writeln(
+          '- Treat allergy management as entirely customer\'s responsibility',
+        );
+        if (behaviorRules.includeHiddenAllergens) {
+          buffer.writeln(
+            '- Only reveal hidden allergens if directly asked - no volunteering information',
+          );
+        }
+        break;
+    }
+
+    // Behavioral flags
+    if (behaviorRules.allowProbing && level == DifficultyLevel.advanced) {
+      buffer.writeln(
+        '\n- May ask follow-up questions to test customer knowledge',
+      );
+    }
+
+    if (behaviorRules.includeHiddenAllergens) {
+      buffer.writeln('- Hidden allergens are present in menu items');
+      buffer.writeln(
+        '- Only reveal hidden allergens when customer asks specifically',
+      );
+    }
+
+    // Trigger words
+    if (behaviorRules.triggerWords.isNotEmpty) {
+      buffer.writeln(
+        '\nTrigger words that should prompt responses: ${behaviorRules.triggerWords.join(", ")}',
+      );
+    }
+
+    return buffer.toString();
+  }
+
+  /// ✅ NEW: Generate enhanced fallback prompt with scenario rules
+  String _generateEnhancedFallbackPrompt(
+    String menuForAI,
+    ScenarioConfig? scenarioConfig,
+    PlayerProfile? playerProfile,
+    ConversationContext context,
+  ) {
+    final buffer = StringBuffer();
+
+    buffer.writeln('You are a restaurant waiter.');
+
+    if (scenarioConfig != null) {
+      buffer.writeln(
+        'Restaurant: ${scenarioConfig.menuData?['restaurant_name'] ?? 'Unknown Restaurant'}',
+      );
+      buffer.writeln('Scenario: ${scenarioConfig.name}');
+      buffer.writeln(scenarioConfig.scenarioContext);
+
+      // Add behavior context
+      buffer.write(
+        _addScenarioBehaviorContext(scenarioConfig, playerProfile, context),
+      );
+    }
+
+    buffer.writeln('\n$menuForAI');
+
+    buffer.writeln('\n🚨🚨🚨 ABSOLUTE MANDATORY RULES 🚨🚨🚨');
+    buffer.writeln(
+      '1. YOU CAN ONLY MENTION FOOD ITEMS THAT ARE LISTED ABOVE IN THE MENU',
+    );
+    buffer.writeln('2. USE THE EXACT DISH NAMES - COPY THEM WORD FOR WORD');
+    buffer.writeln(
+      '3. NEVER MENTION: "garlic bread", "bruschetta", "calamari", generic food names',
+    );
+    buffer.writeln(
+      '4. ONLY suggest items marked "✅ SAFE" for customers with allergies',
+    );
+
+    return buffer.toString();
+  }
+
   /// ✅ NEW: Generate fallback responses using actual menu data
   String _generateMenuBasedFallback(String userInput, String menuForAI) {
     final lowerInput = userInput.toLowerCase();
+
+    // ✅ PRIORITY: Handle positive responses to suggestions (yes, sure, ok, etc.)
+    if (lowerInput.trim() == 'yes' ||
+        lowerInput.trim() == 'sure' ||
+        lowerInput.trim() == 'ok' ||
+        lowerInput.trim() == 'okay' ||
+        lowerInput.contains('yes please') ||
+        lowerInput.contains('that would be great')) {
+      // User is agreeing to suggestions - provide actual safe menu items
+      final menuLines = menuForAI.split('\n');
+      final safeItems = <String>[];
+
+      for (int i = 0; i < menuLines.length; i++) {
+        final line = menuLines[i];
+        if (line.contains('✅ SAFE')) {
+          // Look backward for the item name
+          for (int j = i - 1; j >= math.max(0, i - 5); j--) {
+            final itemLine = menuLines[j];
+            if (itemLine.startsWith('• ')) {
+              safeItems.add(itemLine.substring(2).split(' - ')[0]);
+              break;
+            }
+          }
+          if (safeItems.length >= 3) break;
+        }
+      }
+
+      if (safeItems.isNotEmpty) {
+        return "Perfect! Based on your allergies, I'd recommend ${safeItems.take(2).join(' or ')}. Both are completely safe for you. Which one sounds good?";
+      } else {
+        // Fallback to first available item if no safety info
+        for (final line in menuLines) {
+          if (line.startsWith('• ')) {
+            final firstItem = line.substring(2).split(' - ')[0];
+            return "Perfect! How about our $firstItem? Or would you prefer to see other options from our menu?";
+          }
+        }
+      }
+    }
 
     // ✅ NEW: Handle food type queries (e.g., "what do you have in chicken")
     if (lowerInput.contains('what') &&
@@ -1868,13 +1920,60 @@ Always be helpful and answer questions about ingredients and allergens.
           return "Of course! For starters we have ${starterItems.join(', ')}. We also have mains, desserts, and drinks. What would you like to know more about?";
         }
       }
-      return "Of course! For starters we have Satay Chicken Skewers, Tomato & Basil Soup, Prawn Tempura, Hummus & Pitta, and Buffalo Mozzarella & Pesto. For mains we have Butter Chicken, Thai Green Curry, and more. What sounds good to you?";
+      // Fallback to dynamic menu extraction
+      final menuLines = menuForAI.split('\n');
+      final availableItems = <String>[];
+
+      for (final line in menuLines) {
+        if (line.startsWith('• ')) {
+          availableItems.add(line.substring(2).split(' - ')[0]);
+          if (availableItems.length >= 5) break;
+        }
+      }
+
+      if (availableItems.isNotEmpty) {
+        return "Of course! We have ${availableItems.take(3).join(', ')}, and more. What would you like to know about?";
+      }
+      return "What can I get for you today?";
     } else if (lowerInput.contains('recommend')) {
-      return "I'd recommend our Satay Chicken Skewers for starters, or if you prefer something lighter, our Tomato & Basil Soup is very popular! What are you in the mood for?";
+      // Extract first item from menu for recommendation
+      final menuLines = menuForAI.split('\n');
+      String? firstItem;
+      for (final line in menuLines) {
+        if (line.startsWith('• ')) {
+          firstItem = line.substring(2).split(' - ')[0];
+          break;
+        }
+      }
+      if (firstItem != null) {
+        return "I'd recommend our $firstItem - it's very popular! What are you in the mood for?";
+      }
+      return "What are you in the mood for today?";
     } else if (lowerInput.contains('safe') || lowerInput.contains('allerg')) {
-      // ✅ Handle allergy-specific safe options
-      if (lowerInput.contains('peanut')) {
-        return "Thanks for telling me about your peanut allergy! Safe options for you include Tomato & Basil Soup, Hummus & Pitta, Butter Chicken, and Thai Green Curry. All of these are peanut-free. What sounds good?";
+      // ✅ Handle allergy-specific safe options from actual menu
+      final menuLines = menuForAI.split('\n');
+      final safeItems = <String>[];
+
+      for (int i = 0; i < menuLines.length; i++) {
+        final line = menuLines[i];
+        if (line.contains('✅ SAFE')) {
+          // Look backward for the item name (should be a few lines above)
+          for (int j = i - 1; j >= math.max(0, i - 5); j--) {
+            final itemLine = menuLines[j];
+            if (itemLine.startsWith('• ')) {
+              safeItems.add(itemLine.substring(2).split(' - ')[0]);
+              break;
+            }
+          }
+          if (safeItems.length >= 3) break;
+        }
+      }
+
+      if (safeItems.isNotEmpty) {
+        final allergyType = lowerInput.contains('peanut')
+            ? 'peanut allergy'
+            : 'allergies';
+        return "Thanks for telling me about your $allergyType! Safe options for you include ${safeItems.join(', ')}. What sounds good?";
       } else {
         return "Absolutely! I can help you find something that works for you. Could you tell me about your specific allergies so I can recommend the best options from our menu?";
       }
@@ -2002,6 +2101,7 @@ Always be helpful and answer questions about ingredients and allergens.
     ConversationContext context,
     Map<String, dynamic> analysis,
     String waiterResponse,
+    String userInput, // Add user input parameter
   ) {
     // Add waiter response to messages
     final waiterMessage = ConversationMessage(
@@ -2032,22 +2132,64 @@ Always be helpful and answer questions about ingredients and allergens.
           ...newAllergies,
         ].toSet().toList();
         debugPrint(
-          '[CONTEXT UPDATE] Allergies mentioned in ${analysis['intent']}: $newAllergies',
-        );
-        debugPrint(
           '[CONTEXT UPDATE] All disclosed allergies: $disclosedAllergies',
         );
       }
     }
 
     // ✅ FIXED: Handle food ordering from ANY intent that contains ordered_food
+    // BUT don't overwrite existing dish unless it's clearly a new order
     if (analysis['ordered_food'] != null &&
         analysis['ordered_food'].toString().isNotEmpty &&
         analysis['ordered_food'].toString() != 'null') {
-      selectedDish = analysis['ordered_food'].toString();
-      debugPrint(
-        '[CONTEXT UPDATE] Food ordered: $selectedDish from intent: ${analysis['intent']}',
-      );
+      final rawDish = analysis['ordered_food'].toString();
+      final normalizedDish = _normalizeDishName(rawDish);
+
+      // Only update if it's a different dish OR if no dish was previously selected
+      // Avoid overwriting when user is just confirming (e.g., "yes, bread with that")
+      final lowerInput = userInput.toLowerCase();
+      final isConfirmation =
+          lowerInput.startsWith('yes') ||
+          lowerInput.startsWith('sure') ||
+          lowerInput.startsWith('okay') ||
+          lowerInput.contains('with that') ||
+          lowerInput.contains('sounds good') ||
+          lowerInput.contains('that sounds') ||
+          lowerInput.contains('that\'s good') ||
+          lowerInput.contains('that works');
+
+      // Don't overwrite existing main dish selection with confirmations or side items
+      if (selectedDish != null && isConfirmation) {
+        debugPrint(
+          '[CONTEXT SKIP] User confirming existing order: $selectedDish, ignoring additional item: $rawDish',
+        );
+      } else if (selectedDish == null || normalizedDish != selectedDish) {
+        // Check if it's a real main dish menu item (not just bread/water/sides)
+        final isSideItem = [
+          'bread',
+          'water',
+          'drink',
+          'soda',
+          'juice',
+          'roll',
+          'croutons',
+        ].contains(normalizedDish?.toLowerCase());
+        final isRealMenuItem =
+            normalizedDish != null && normalizedDish.length > 3 && !isSideItem;
+
+        if (isRealMenuItem) {
+          selectedDish = normalizedDish;
+          debugPrint(
+            '[CONTEXT UPDATE] Food ordered: $selectedDish (normalized from: $rawDish) from intent: ${analysis['intent']}',
+          );
+        } else {
+          debugPrint(
+            '[CONTEXT SKIP] Ignoring side item/beverage: $rawDish (normalized: $normalizedDish)',
+          );
+        }
+      } else {
+        debugPrint('[CONTEXT SKIP] Same dish already selected: $selectedDish');
+      }
     }
 
     // Handle order confirmation (waiter confirms the order)
@@ -2119,5 +2261,61 @@ Always be helpful and answer questions about ingredients and allergens.
   void dispose() {
     _speechToText.cancel();
     _realisticTts.dispose();
+  }
+
+  /// Normalize dish names to match menu items
+  String? _normalizeDishName(String? dishName) {
+    if (dishName == null || dishName.isEmpty) return null;
+
+    final normalized = dishName.toLowerCase().trim();
+
+    // Common dish name mappings to match menu exactly
+    final dishMappings = {
+      'tomato basil soup': 'Tomato & Basil Soup',
+      'tomato and basil soup': 'Tomato & Basil Soup',
+      'satay chicken skewers': 'Satay Chicken Skewers',
+      'satay chicken': 'Satay Chicken Skewers',
+      'chicken satay': 'Satay Chicken Skewers',
+      'prawn tempura': 'Prawn Tempura',
+      'tempura prawns': 'Prawn Tempura',
+      'hummus pitta': 'Hummus & Pitta',
+      'hummus and pitta': 'Hummus & Pitta',
+      'buffalo mozzarella pesto': 'Buffalo Mozzarella & Pesto',
+      'mozzarella and pesto': 'Buffalo Mozzarella & Pesto',
+      'butter chicken': 'Butter Chicken',
+      'thai green curry': 'Thai Green Curry',
+      'green curry': 'Thai Green Curry',
+      'seafood linguine': 'Seafood Linguine',
+      'sushi platter': 'Sushi Platter',
+      'sticky toffee pudding': 'Sticky Toffee Pudding',
+      'chocolate brownies': 'Chocolate Brownies',
+      'chocolate brownie': 'Chocolate Brownies',
+      'vegan lentil pie': 'Vegan Lentil Shepherd\'s Pie',
+      'vegan shepherds pie': 'Vegan Lentil Shepherd\'s Pie',
+      'lentil shepherds pie': 'Vegan Lentil Shepherd\'s Pie',
+    };
+
+    // Check for exact match first
+    if (dishMappings.containsKey(normalized)) {
+      return dishMappings[normalized]!;
+    }
+
+    // Partial matching for variations
+    for (final mapping in dishMappings.entries) {
+      if (normalized.contains(mapping.key) ||
+          mapping.key.contains(normalized)) {
+        return mapping.value;
+      }
+    }
+
+    // If no mapping found, return original with proper capitalization
+    return dishName
+        .split(' ')
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : word[0].toUpperCase() + word.substring(1).toLowerCase(),
+        )
+        .join(' ');
   }
 }

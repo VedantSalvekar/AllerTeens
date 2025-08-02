@@ -1,0 +1,316 @@
+{
+  "restaurant_name": "AllerWise Advanced Training",
+  "menu_sections": [
+    {
+      "section": "starters",
+      "items": [
+        {
+          "id": "A1",
+          "name": "Duck Liver Parfait",
+          "description": "Served with toasted brioche and onion jam",
+          "price": 9.95,
+          "allergens": [
+            "milk",
+            "egg",
+            "gluten (wheat)"
+          ],
+          "hidden_allergens": [
+            "sulphites in onion jam"
+          ],
+          "modifiable_to_safe": false,
+          "suggested_questions": [
+            "Is the brioche prepared separately from other gluten items?",
+            "Does the onion jam contain sulphites?"
+          ]
+        },
+        {
+          "id": "A2",
+          "name": "Tempura Mixed Veggies",
+          "description": "Crispy vegetables with soy-chili dip",
+          "price": 8.5,
+          "allergens": [
+            "gluten (wheat)",
+            "soybeans"
+          ],
+          "hidden_allergens": [
+            "sesame oil in dip"
+          ],
+          "modifiable_to_safe": true,
+          "suggested_questions": [
+            "Is the fryer shared with fish or shellfish?",
+            "Can I skip the dip or get allergen-free sauce?"
+          ]
+        },
+        {
+          "id": "A3",
+          "name": "Smoked Salmon Blinis",
+          "description": "With crème fraîche and caviar on buckwheat blinis",
+          "price": 12.95,
+          "allergens": [
+            "fish",
+            "milk",
+            "egg"
+          ],
+          "hidden_allergens": [
+            "mustard in dill sauce",
+            "sulphites in salmon cure"
+          ],
+          "modifiable_to_safe": false,
+          "suggested_questions": [
+            "Are the blinis made with lupin flour?",
+            "Does the dill sauce contain mustard or sulphites?"
+          ]
+        },
+        {
+          "id": "A4",
+          "name": "Mediterranean Mezze",
+          "description": "Hummus, tapenade, falafel with sesame crackers",
+          "price": 10.50,
+          "allergens": [
+            "sesame",
+            "soybeans"
+          ],
+          "hidden_allergens": [
+            "lupin flour in falafel",
+            "celery seeds in tapenade",
+            "tree nuts in processing"
+          ],
+          "modifiable_to_safe": true,
+          "suggested_questions": [
+            "Is lupin flour used in the falafel mix?",
+            "Are there celery seeds or nut traces in any component?"
+          ]
+        }
+      ]
+    },
+    {
+      "section": "mains",
+      "items": [
+        {
+          "id": "A5",
+          "name": "Katsu Curry",
+          "description": "Breaded pork cutlet with curry sauce",
+          "price": 17.25,
+          "allergens": [
+            "gluten (wheat)",
+            "peanuts",
+            "egg",
+            "soybeans"
+          ],
+          "hidden_allergens": [
+            "milk in breading",
+            "mustard in curry"
+          ],
+          "modifiable_to_safe": false,
+          "suggested_questions": [
+            "Is the curry sauce prepared with mustard or dairy?",
+            "Can you confirm it's not fried in shared oil with shellfish?"
+          ]
+        },
+        {
+          "id": "A6",
+          "name": "Stuffed Bell Peppers",
+          "description": "Filled with rice, nuts, and goat cheese",
+          "price": 15.75,
+          "allergens": [
+            "milk",
+            "tree nuts (walnuts)"
+          ],
+          "hidden_allergens": [
+            "celery in stock"
+          ],
+          "modifiable_to_safe": true,
+          "suggested_questions": [
+            "Can I get it without nuts and cheese?",
+            "Is the stock nut and celery-free?"
+          ]
+        },
+        {
+          "id": "A7",
+          "name": "Shellfish Paella",
+          "description": "Traditional rice dish with prawns, mussels, squid",
+          "price": 19.95,
+          "allergens": [
+            "crustaceans",
+            "molluscs",
+            "fish"
+          ],
+          "hidden_allergens": [
+            "sulphites in stock"
+          ],
+          "modifiable_to_safe": false,
+          "suggested_questions": [
+            "Are shellfish and fish cooked together or separately?",
+            "Can you confirm no wheat or sulphites in the stock?"
+          ]
+        },
+        {
+          "id": "A8",
+          "name": "Thai Green Curry with Tofu",
+          "description": "Coconut curry with vegetables and protein alternatives",
+          "price": 16.50,
+          "allergens": [
+            "soybeans",
+            "fish (fish sauce)"
+          ],
+          "hidden_allergens": [
+            "peanuts in paste",
+            "lupin protein in tofu",
+            "sesame oil"
+          ],
+          "modifiable_to_safe": true,
+          "suggested_questions": [
+            "Is the curry paste made with peanuts or fish sauce?",
+            "Does the tofu contain lupin protein?"
+          ]
+        },
+        {
+          "id": "A9",
+          "name": "Moroccan Lamb Tagine",
+          "description": "Slow-cooked lamb with preserved lemons and olives",
+          "price": 22.95,
+          "allergens": [
+            "sulphites"
+          ],
+          "hidden_allergens": [
+            "tree nuts (almonds) in spice mix",
+            "celery seed in preserved lemons",
+            "mustard seed in spice blend"
+          ],
+          "modifiable_to_safe": false,
+          "suggested_questions": [
+            "Are there almonds or other nuts in the spice blend?",
+            "Do the preserved lemons contain celery or mustard seeds?"
+          ]
+        }
+      ]
+    },
+    {
+      "section": "desserts",
+      "items": [
+        {
+          "id": "A10",
+          "name": "Hazelnut Chocolate Torte",
+          "description": "Flourless cake with hazelnuts and cream",
+          "price": 7.50,
+          "allergens": [
+            "tree nuts (hazelnut)",
+            "milk",
+            "egg"
+          ],
+          "hidden_allergens": [
+            "lupin flour in base",
+            "sesame oil in chocolate"
+          ],
+          "modifiable_to_safe": false,
+          "suggested_questions": [
+            "Is lupin flour used in the cake base?",
+            "Does the chocolate contain sesame oil?"
+          ]
+        },
+        {
+          "id": "A11",
+          "name": "Orange Polenta Cake",
+          "description": "With almond flour and citrus glaze",
+          "price": 6.95,
+          "allergens": [
+            "tree nuts (almond)",
+            "egg"
+          ],
+          "hidden_allergens": [
+            "milk in glaze",
+            "gluten cross-contamination",
+            "sulphites in preserved orange"
+          ],
+          "modifiable_to_safe": true,
+          "suggested_questions": [
+            "Can I skip the glaze and confirm nut cross-contact?",
+            "Are there sulphites in the preserved orange?"
+          ]
+        },
+        {
+          "id": "A12",
+          "name": "Tiramisu",
+          "description": "Traditional Italian dessert with mascarpone and coffee",
+          "price": 8.25,
+          "allergens": [
+            "milk",
+            "egg",
+            "gluten (wheat)"
+          ],
+          "hidden_allergens": [
+            "soybeans in lecithin",
+            "sulphites in wine"
+          ],
+          "modifiable_to_safe": false,
+          "suggested_questions": [
+            "Does the mascarpone contain soy lecithin?",
+            "Is wine with sulphites used in preparation?"
+          ]
+        }
+      ]
+    },
+    {
+      "section": "drinks",
+      "items": [
+        {
+          "id": "A13",
+          "name": "Bloody Mary",
+          "description": "Vodka, tomato juice, spices",
+          "price": 8.50,
+          "allergens": [
+            "celery"
+          ],
+          "hidden_allergens": [
+            "sulphites",
+            "mustard",
+            "fish (worcestershire sauce)"
+          ],
+          "modifiable_to_safe": false,
+          "suggested_questions": [
+            "Is there mustard, sulphites, or fish sauce in the mix?",
+            "Can I get it without celery and worcestershire?"
+          ]
+        },
+        {
+          "id": "A14",
+          "name": "Protein Green Smoothie",
+          "description": "Spinach, banana, almond milk, whey protein",
+          "price": 5.95,
+          "allergens": [
+            "milk",
+            "tree nuts (almond)"
+          ],
+          "hidden_allergens": [
+            "soybeans (lecithin in protein powder)",
+            "lupin protein alternative"
+          ],
+          "modifiable_to_safe": true,
+          "suggested_questions": [
+            "Can I swap almond milk and whey protein for alternatives?",
+            "Is there soy lecithin or lupin protein in any ingredients?"
+          ]
+        },
+        {
+          "id": "A15",
+          "name": "Artisanal Coffee Blend",
+          "description": "House special with flavored syrups and cream",
+          "price": 4.25,
+          "allergens": [
+            "milk"
+          ],
+          "hidden_allergens": [
+            "tree nuts (hazelnut syrup)",
+            "soybeans (soy lecithin in creamer)",
+            "sulphites (preservation)"
+          ],
+          "modifiable_to_safe": true,
+          "suggested_questions": [
+            "Are there nuts in any of the flavored syrups?",
+            "Does the creamer contain soy lecithin or sulphites?"
+          ]
+        }
+      ]
+    }
+  ]
+}

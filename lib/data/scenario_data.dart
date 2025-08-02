@@ -1,16 +1,193 @@
 import 'package:flutter/material.dart';
 import '../models/scenario_models.dart';
 import '../core/constants.dart';
+import '../services/scenario_loader.dart';
 
-/// Provides all available training scenarios
+/// Provides all available training scenarios using the new dynamic system
 class ScenarioDataProvider {
+  static final ScenarioLoader _scenarioLoader = ScenarioLoader.instance;
+
+  /// Get all scenarios from the dynamic manifest
+  static Future<List<TrainingScenario>> getAllScenariosAsync() async {
+    try {
+      final scenarioMetadataList = await _scenarioLoader
+          .getAvailableScenarios();
+      return scenarioMetadataList
+          .map((metadata) => _convertToTrainingScenario(metadata))
+          .toList();
+    } catch (e) {
+      // Fallback to hardcoded scenarios if loading fails
+      return _getHardcodedScenarios();
+    }
+  }
+
+  /// Synchronous version for backward compatibility - loads from cache or fallback
   static List<TrainingScenario> getAllScenarios() {
+    // Return fallback scenarios immediately - the UI should use the async version for live data
+    return _getHardcodedScenarios();
+  }
+
+  /// Convert ScenarioMetadata to TrainingScenario for UI compatibility
+  static TrainingScenario _convertToTrainingScenario(
+    ScenarioMetadata metadata,
+  ) {
+    return TrainingScenario(
+      id: metadata.id,
+      title: metadata.name,
+      description: metadata.description,
+      iconPath: _getIconPathForType(metadata.type),
+      type: metadata.type,
+      difficulty: metadata.level,
+      learningObjectives: _getLearningObjectives(metadata.type, metadata.level),
+      scenarioData: {
+        'setting': _getSettingForScenario(metadata.id),
+        'npcRole': _getNpcRoleForScenario(metadata.id),
+        'complexity': metadata.level == DifficultyLevel.beginner
+            ? 'low'
+            : metadata.level == DifficultyLevel.intermediate
+            ? 'medium'
+            : 'high',
+        'prompts': metadata.level == DifficultyLevel.beginner
+            ? 'high'
+            : metadata.level == DifficultyLevel.intermediate
+            ? 'medium'
+            : 'low',
+      },
+      accentColor: _getColorForType(metadata.type),
+      estimatedDuration: _getDurationForScenario(metadata.id),
+      isUnlocked: metadata.enabled,
+      requiredScore: metadata.requiredScore,
+      rewards: _getRewardsForScenario(metadata.id),
+    );
+  }
+
+  /// Get icon path based on scenario type
+  static String _getIconPathForType(ScenarioType type) {
+    switch (type) {
+      case ScenarioType.restaurant:
+        return 'assets/icons/restaurant.png';
+      case ScenarioType.party:
+        return 'assets/icons/party.png';
+      case ScenarioType.school:
+        return 'assets/icons/school.png';
+      case ScenarioType.takeaway:
+        return 'assets/icons/takeaway.png';
+      default:
+        return 'assets/icons/default.png';
+    }
+  }
+
+  /// Get accent color based on scenario type
+  static Color _getColorForType(ScenarioType type) {
+    switch (type) {
+      case ScenarioType.restaurant:
+        return AppColors.primary;
+      case ScenarioType.party:
+        return const Color(0xFF9C27B0);
+      case ScenarioType.school:
+        return const Color(0xFF2196F3);
+      case ScenarioType.takeaway:
+        return const Color(0xFFFF9800);
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  /// Get learning objectives based on type and level
+  static List<String> _getLearningObjectives(
+    ScenarioType type,
+    DifficultyLevel level,
+  ) {
+    if (type == ScenarioType.restaurant) {
+      if (level == DifficultyLevel.beginner) {
+        return [
+          'Clearly state your allergies to the waiter',
+          'Ask about ingredients in menu items',
+          'Confirm safe options before ordering',
+        ];
+      } else if (level == DifficultyLevel.advanced) {
+        return [
+          'Navigate complex menus with hidden allergens',
+          'Ask detailed questions about preparation methods',
+          'Handle professional service with minimal guidance',
+          'Demonstrate cross-contamination awareness',
+        ];
+      }
+    } else if (type == ScenarioType.party) {
+      return [
+        'Communicate with party hosts',
+        'Handle peer pressure appropriately',
+        'Suggest safe alternatives',
+      ];
+    }
+
+    return ['Practice allergy communication skills'];
+  }
+
+  /// Get setting description for scenario
+  static String _getSettingForScenario(String id) {
+    switch (id) {
+      case 'restaurant_beginner':
+        return 'Casual family restaurant';
+      case 'restaurant_advanced':
+        return 'Upscale fine dining restaurant';
+      case 'party_intermediate':
+        return 'Friend\'s birthday party';
+      default:
+        return 'Training environment';
+    }
+  }
+
+  /// Get NPC role for scenario
+  static String _getNpcRoleForScenario(String id) {
+    switch (id) {
+      case 'restaurant_beginner':
+        return 'Friendly waiter';
+      case 'restaurant_advanced':
+        return 'Professional waiter';
+      case 'party_intermediate':
+        return 'Party host parent';
+      default:
+        return 'Training partner';
+    }
+  }
+
+  /// Get estimated duration for scenario
+  static int _getDurationForScenario(String id) {
+    switch (id) {
+      case 'restaurant_beginner':
+        return 3;
+      case 'restaurant_advanced':
+        return 5;
+      case 'party_intermediate':
+        return 6;
+      default:
+        return 4;
+    }
+  }
+
+  /// Get rewards for scenario
+  static List<String> _getRewardsForScenario(String id) {
+    switch (id) {
+      case 'restaurant_beginner':
+        return ['Confidence points', 'Restaurant safety badge'];
+      case 'restaurant_advanced':
+        return ['Advanced communication badge', 'Professional dining skills'];
+      case 'party_intermediate':
+        return ['Social confidence badge', 'Party safety points'];
+      default:
+        return ['Training completion points'];
+    }
+  }
+
+  /// Fallback hardcoded scenarios (includes restaurant_advanced)
+  static List<TrainingScenario> _getHardcodedScenarios() {
     return [
       // BEGINNER LEVEL SCENARIOS
       TrainingScenario(
         id: 'restaurant_beginner',
-        title: 'Restaurant Dining',
-        description: 'Practice ordering safely with allergy disclosure',
+        title: 'Restaurant Dining - Beginner',
+        description: 'Practice basic allergy disclosure with a friendly waiter',
         iconPath: 'assets/icons/restaurant.png',
         type: ScenarioType.restaurant,
         difficulty: DifficultyLevel.beginner,
@@ -20,7 +197,7 @@ class ScenarioDataProvider {
           'Confirm safe options before ordering',
         ],
         scenarioData: {
-          'setting': 'Family restaurant',
+          'setting': 'Casual family restaurant',
           'npcRole': 'Friendly waiter',
           'complexity': 'low',
           'prompts': 'high',
@@ -29,6 +206,34 @@ class ScenarioDataProvider {
         estimatedDuration: 3,
         isUnlocked: true,
         rewards: ['Confidence points', 'Restaurant safety badge'],
+      ),
+
+      // ADVANCED LEVEL SCENARIOS
+      TrainingScenario(
+        id: 'restaurant_advanced',
+        title: 'Restaurant Dining - Advanced',
+        description:
+            'Navigate complex menu items with hidden allergens and professional service',
+        iconPath: 'assets/icons/restaurant.png',
+        type: ScenarioType.restaurant,
+        difficulty: DifficultyLevel.advanced,
+        learningObjectives: [
+          'Navigate complex menus with hidden allergens',
+          'Ask detailed questions about preparation methods',
+          'Handle professional service with minimal guidance',
+          'Demonstrate cross-contamination awareness',
+        ],
+        scenarioData: {
+          'setting': 'Upscale fine dining restaurant',
+          'npcRole': 'Professional waiter',
+          'complexity': 'high',
+          'prompts': 'low',
+        },
+        accentColor: AppColors.primary,
+        estimatedDuration: 5,
+        isUnlocked: true,
+        requiredScore: 0,
+        rewards: ['Advanced communication badge', 'Professional dining skills'],
       ),
 
       TrainingScenario(
@@ -52,15 +257,16 @@ class ScenarioDataProvider {
         accentColor: const Color(0xFFFF9800),
         estimatedDuration: 2,
         isUnlocked: false,
-        requiredScore: 80, // Lock until restaurant is mastered
+        requiredScore: 80,
         rewards: ['Takeaway safety badge'],
       ),
 
       // INTERMEDIATE LEVEL SCENARIOS
       TrainingScenario(
-        id: 'birthday_party',
+        id: 'party_intermediate',
         title: 'Birthday Party',
-        description: 'Handle social situations with food allergies',
+        description:
+            'Handle social pressure and peer interactions at a friend\'s party',
         iconPath: 'assets/icons/party.png',
         type: ScenarioType.party,
         difficulty: DifficultyLevel.intermediate,
@@ -81,7 +287,7 @@ class ScenarioDataProvider {
         rewards: ['Social confidence badge', 'Party safety points'],
       ),
 
-      // ADVANCED LEVEL SCENARIOS
+      // OTHER SCENARIOS
       TrainingScenario(
         id: 'emergency_prep',
         title: 'Emergency Situations',

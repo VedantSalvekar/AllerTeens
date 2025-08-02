@@ -176,7 +176,7 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
                     ),
                   ),
                   Text(
-                    '/100',
+                    '/${widget.assessment.isAdvancedLevel ? "200" : "100"}',
                     style: TextStyle(
                       fontSize: 12,
                       color: _getScoreColor(widget.assessment.totalScore),
@@ -469,28 +469,8 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
           ),
           const SizedBox(height: 20),
 
-          // Key Skills Breakdown
-          _buildSkillBreakdown(
-            'Allergy Disclosure',
-            widget.assessment.allergyDisclosureScore,
-            70, // Updated max score
-            widget.assessment.allergyDisclosureScore >= 70
-                ? 'Excellent'
-                : 'Needs Work',
-            AppColors.primary,
-          ),
-
-          const SizedBox(height: 12),
-
-          _buildSkillBreakdown(
-            'Safety Awareness',
-            widget.assessment.riskAssessmentScore,
-            30, // Updated max score
-            widget.assessment.riskAssessmentScore >= 30
-                ? 'Excellent'
-                : 'Needs Work',
-            const Color(0xFF4CAF50),
-          ),
+          // Use new detailed scoring system
+          _buildDetailedScores(),
         ],
       ),
     );
@@ -741,6 +721,14 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
   }
 
   Widget _buildDetailedScores() {
+    if (widget.assessment.isAdvancedLevel) {
+      return _buildAdvancedDetailedScores();
+    } else {
+      return _buildBeginnerDetailedScores();
+    }
+  }
+
+  Widget _buildBeginnerDetailedScores() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -837,6 +825,221 @@ class _TrainingFeedbackScreenState extends ConsumerState<TrainingFeedbackScreen>
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildAdvancedDetailedScores() {
+    // Extract actual scores from detailed scores map or use individual fields
+    final actualScores = widget.assessment.detailedScores;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Advanced Level - Detailed Assessment',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Target Score: 150/200 points',
+          style: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Core Safety Actions
+        _buildScoreCategory(
+          'Core Safety Actions',
+          (actualScores['allergy_disclosure'] ?? 0) +
+              (actualScores['safe_food_order'] ?? 0),
+          90, // 50 + 40
+          AppColors.primary,
+          [
+            _buildScoreItem(
+              'Allergy Disclosure',
+              actualScores['allergy_disclosure'] ?? 0,
+              50,
+            ),
+            _buildScoreItem(
+              'Safe Food Selection',
+              actualScores['safe_food_order'] ?? 0,
+              40,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Detailed Questioning
+        _buildScoreCategory(
+          'Detailed Questioning',
+          (actualScores['ingredient_questions'] ?? 0) +
+              (actualScores['cross_contamination_awareness'] ?? 0) +
+              (actualScores['hidden_allergen_questions'] ?? 0) +
+              (actualScores['preparation_method_inquiry'] ?? 0),
+          80, // 25 + 20 + 20 + 15
+          const Color(0xFF4CAF50),
+          [
+            _buildScoreItem(
+              'Ingredient Questions',
+              actualScores['ingredient_questions'] ?? 0,
+              25,
+            ),
+            _buildScoreItem(
+              'Cross-Contamination Inquiry',
+              actualScores['cross_contamination_awareness'] ?? 0,
+              20,
+            ),
+            _buildScoreItem(
+              'Hidden Allergen Questions',
+              actualScores['hidden_allergen_questions'] ?? 0,
+              20,
+            ),
+            _buildScoreItem(
+              'Preparation Method Verification',
+              actualScores['preparation_method_inquiry'] ?? 0,
+              15,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Bonus Points
+        _buildScoreCategory(
+          'Bonus Points',
+          (actualScores['detailed_questions'] ?? 0) +
+              (actualScores['multiple_safety_questions'] ?? 0) +
+              (actualScores['kitchen_verification_request'] ?? 0),
+          30, // Up to 30 bonus points possible
+          const Color(0xFFFF9800),
+          [
+            _buildScoreItem(
+              'Detailed Questions',
+              actualScores['detailed_questions'] ?? 0,
+              15,
+            ),
+            _buildScoreItem(
+              'Multiple Safety Questions',
+              actualScores['multiple_safety_questions'] ?? 0,
+              12,
+            ),
+            _buildScoreItem(
+              'Kitchen Verification',
+              actualScores['kitchen_verification_request'] ?? 0,
+              10,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Bonus Actions
+        if (widget.assessment.earnedBonuses.isNotEmpty) _buildBonusSection(),
+
+        // Missed Actions (Critical)
+        if (widget.assessment.missedActions.isNotEmpty)
+          _buildMissedActionsSection(),
+      ],
+    );
+  }
+
+  Widget _buildBonusSection() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.star, color: Colors.green[600], size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Bonus Actions Performed',
+                style: TextStyle(
+                  color: Colors.green[800],
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...widget.assessment.earnedBonuses
+              .map(
+                (bonus) => Padding(
+                  padding: const EdgeInsets.only(left: 28, bottom: 4),
+                  child: Text(
+                    '• $bonus',
+                    style: TextStyle(color: Colors.green[700], fontSize: 14),
+                  ),
+                ),
+              )
+              .toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMissedActionsSection() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning, color: Colors.red[600], size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Critical Actions You Missed',
+                style: TextStyle(
+                  color: Colors.red[800],
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Each missed action: -10 points',
+            style: TextStyle(
+              color: Colors.red[600],
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...widget.assessment.missedActions
+              .map(
+                (missed) => Padding(
+                  padding: const EdgeInsets.only(left: 28, bottom: 4),
+                  child: Text(
+                    '• $missed',
+                    style: TextStyle(color: Colors.red[700], fontSize: 14),
+                  ),
+                ),
+              )
+              .toList(),
+        ],
+      ),
     );
   }
 

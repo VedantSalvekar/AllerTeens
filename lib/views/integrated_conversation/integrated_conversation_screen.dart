@@ -1,10 +1,7 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flame/game.dart';
 import 'package:provider/provider.dart';
-import '../../services/openai_dialogue_service.dart';
 import '../../services/menu_service.dart';
 import '../../core/constants.dart';
 import '../../models/training_assessment.dart';
@@ -14,6 +11,10 @@ import 'interactive_waiter_game.dart';
 import 'training_feedback_screen.dart';
 
 class IntegratedConversationScreen extends StatefulWidget {
+  final String? scenarioId;
+
+  const IntegratedConversationScreen({super.key, this.scenarioId});
+
   @override
   _IntegratedConversationScreenState createState() =>
       _IntegratedConversationScreenState();
@@ -52,8 +53,8 @@ class _IntegratedConversationScreenState
       _aiController = AIConversationController();
       _setupAIControllerCallbacks();
 
-      // Initialize the controller asynchronously
-      await _aiController.initialize();
+      // Initialize the controller asynchronously with scenario ID
+      await _aiController.initialize(scenarioId: widget.scenarioId);
 
       setState(() {
         _isControllerInitialized = true;
@@ -848,9 +849,10 @@ class _IntegratedConversationScreenState
 
   void _showMenuDialog() async {
     try {
-      // Load menu data
-      final menu = await MenuService.instance.loadMenu();
-      final menuText = MenuService.instance.formatMenuForDisplay();
+      // Load menu data based on current scenario
+      final scenarioId =
+          _aiController.currentScenarioId ?? 'restaurant_beginner';
+      final menu = await MenuService.instance.loadMenuForScenario(scenarioId);
 
       if (!mounted) return;
 
@@ -876,12 +878,7 @@ class _IntegratedConversationScreenState
           content: Container(
             width: double.maxFinite,
             constraints: const BoxConstraints(maxHeight: 400),
-            child: SingleChildScrollView(
-              child: Text(
-                menuText,
-                style: const TextStyle(fontSize: 14, height: 1.4),
-              ),
-            ),
+            child: SingleChildScrollView(child: _buildMenuContent(menu)),
           ),
           actions: [
             TextButton(
@@ -902,6 +899,59 @@ class _IntegratedConversationScreenState
         );
       }
     }
+  }
+
+  Widget _buildMenuContent(RestaurantMenu menu) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: menu.menuSections.map((section) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                section.section.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            ...section.items.map((item) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item.name} - £${item.price.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.description,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.normal,
+                        height: 1.4,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 8),
+          ],
+        );
+      }).toList(),
+    );
   }
 
   void _showExitDialog() {

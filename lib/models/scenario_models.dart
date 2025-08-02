@@ -52,8 +52,7 @@ enum ScenarioType {
 enum DifficultyLevel {
   beginner, // Clear prompts, supportive AI
   intermediate, // Some challenges, requires initiative
-  advanced, // Complex situations, minimal guidance
-  expert, // Real-world complexity, peer pressure
+  advanced, // Complex situations, minimal guidance, real-world complexity
 }
 
 /// Achievement system for gamification

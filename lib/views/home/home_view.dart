@@ -964,6 +964,7 @@ class _ScenarioSelectionContentState
           final scenario = scenarios[index];
           final isUnlocked =
               scenario.id == 'restaurant_beginner' ||
+              scenario.id == 'restaurant_advanced' ||
               userScore >= scenario.requiredScore;
           return Padding(
             padding: const EdgeInsets.only(bottom: 16), // Spacing between cards
@@ -1416,8 +1417,6 @@ class _ScenarioSelectionContentState
         return 'INTERMEDIATE';
       case DifficultyLevel.advanced:
         return 'ADVANCED';
-      case DifficultyLevel.expert:
-        return 'EXPERT';
     }
   }
 
@@ -1473,9 +1472,8 @@ class _ScenarioSelectionContentState
     TrainingScenario scenario,
   ) async {
     try {
-      // Load menu data
-      final menu = await MenuService.instance.loadMenu();
-      final menuText = MenuService.instance.formatMenuForDisplay();
+      // Load scenario-specific menu data
+      final menu = await MenuService.instance.loadMenuForScenario(scenario.id);
 
       if (!context.mounted) return;
 
@@ -1502,16 +1500,7 @@ class _ScenarioSelectionContentState
           content: Container(
             width: double.maxFinite,
             constraints: const BoxConstraints(maxHeight: 400),
-            child: SingleChildScrollView(
-              child: Text(
-                menuText,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  height: 1.4,
-                ),
-              ),
-            ),
+            child: SingleChildScrollView(child: _buildMenuContent(menu)),
           ),
           actions: [
             TextButton(
@@ -1524,7 +1513,8 @@ class _ScenarioSelectionContentState
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => IntegratedConversationScreen(),
+                    builder: (context) =>
+                        IntegratedConversationScreen(scenarioId: scenario.id),
                   ),
                 ).then((_) {
                   // Refresh progress data when returning from training
@@ -1546,13 +1536,67 @@ class _ScenarioSelectionContentState
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => IntegratedConversationScreen(),
+            builder: (context) =>
+                IntegratedConversationScreen(scenarioId: scenario.id),
           ),
         ).then((_) {
           refreshProgressData();
         });
       }
     }
+  }
+
+  Widget _buildMenuContent(RestaurantMenu menu) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: menu.menuSections.map((section) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                section.section.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            ...section.items.map((item) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item.name} - £${item.price.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.description,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.normal,
+                        height: 1.4,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 8),
+          ],
+        );
+      }).toList(),
+    );
   }
 
   Widget _buildScenarioDetailsDialog(TrainingScenario scenario) {
