@@ -187,8 +187,8 @@ class ProgressTrackingService {
     TrainingScenario scenario,
   ) async {
     try {
-      // Restaurant scenario is always unlocked
-      if (scenario.id == 'restaurant_beginner') return true;
+      // Restaurant scenarios are always unlocked for testing
+      if (scenario.id == 'restaurant_beginner' || scenario.id == 'restaurant_advanced') return true;
 
       final userProgress = await getUserProgress(userId);
       if (userProgress == null) return false;

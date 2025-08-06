@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
+import 'scenario_loader.dart';
+
 /// Service for managing restaurant menu data and allergen safety
 class MenuService {
   static MenuService? _instance;
@@ -9,25 +11,115 @@ class MenuService {
   MenuService._();
 
   RestaurantMenu? _menu;
+  String? _currentMenuIdentifier;
+  final ScenarioLoader _scenarioLoader = ScenarioLoader.instance;
 
-  /// Load menu data from JSON file
-  Future<RestaurantMenu> loadMenu() async {
-    if (_menu != null) return _menu!;
+  /// Load menu for a specific scenario - the main entry point
+  Future<RestaurantMenu> loadMenuForScenario(String scenarioId) async {
+    try {
+      // Create unique identifier for this scenario's menu
+      final menuIdentifier = 'scenario_$scenarioId';
+
+      // If we already have the right menu loaded, return it
+      if (_menu != null && _currentMenuIdentifier == menuIdentifier) {
+        return _menu!;
+      }
+
+      // Load scenario configuration to get menu info
+      final scenarioConfig = await _scenarioLoader.loadScenario(scenarioId);
+
+      // Load menu from scenario config
+      if (scenarioConfig.menuData != null) {
+        _menu = RestaurantMenu.fromJson(scenarioConfig.menuData!);
+        _currentMenuIdentifier = menuIdentifier;
+        debugPrint(
+          '[MENU] Loaded menu for scenario $scenarioId with ${_menu!.getAllItems().length} items',
+        );
+        return _menu!;
+      } else {
+        throw Exception('No menu data found for scenario $scenarioId');
+      }
+    } catch (e) {
+      debugPrint('[MENU] Error loading menu for scenario $scenarioId: $e');
+      // Fallback to default menu
+      return await _loadFallbackMenu();
+    }
+  }
+
+  /// Load menu data from provided data or default file (legacy support)
+  Future<RestaurantMenu> loadMenu({
+    Map<String, dynamic>? menuData,
+    String? menuFile,
+  }) async {
+    // If we have menu data, use it directly
+    if (menuData != null) {
+      _menu = RestaurantMenu.fromJson(menuData);
+      _currentMenuIdentifier = 'provided_data';
+      debugPrint(
+        '[MENU] Loaded menu from provided data with ${_menu!.getAllItems().length} items',
+      );
+      return _menu!;
+    }
+
+    // Determine which menu file to load
+    final targetMenuFile = menuFile ?? 'restaurant_menu.json';
+
+    // If we already have the right menu loaded, return it
+    if (_menu != null && _currentMenuIdentifier == targetMenuFile) {
+      return _menu!;
+    }
 
     try {
       final String jsonString = await rootBundle.loadString(
-        'assets/data/restaurant_menu.json',
+        'assets/data/$targetMenuFile',
       );
       final Map<String, dynamic> jsonData = json.decode(jsonString);
       _menu = RestaurantMenu.fromJson(jsonData);
+      _currentMenuIdentifier = targetMenuFile;
       debugPrint(
-        '✅ [MENU] Loaded menu with ${_menu!.getAllItems().length} items',
+        '[MENU] Loaded menu from $targetMenuFile with ${_menu!.getAllItems().length} items',
       );
       return _menu!;
     } catch (e) {
-      debugPrint('❌ [MENU] Error loading menu: $e');
+      debugPrint('[MENU] Error loading menu from $targetMenuFile: $e');
       rethrow;
     }
+  }
+
+  /// Load fallback menu for error cases
+  Future<RestaurantMenu> _loadFallbackMenu() async {
+    try {
+      return await loadMenu(menuFile: 'restaurant_menu.json');
+    } catch (e) {
+      debugPrint('[MENU] Even fallback menu failed to load: $e');
+      // Return minimal menu as last resort
+      return RestaurantMenu(
+        restaurantName: 'Fallback Restaurant',
+        menuSections: [
+          MenuSection(
+            section: 'mains',
+            items: [
+              MenuItem(
+                id: 'safe1',
+                name: 'Plain Rice',
+                description: 'Simple steamed rice',
+                price: 5.0,
+                allergens: [],
+                hiddenAllergens: [],
+                modifiableToSafe: true,
+                suggestedQuestions: [],
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+  }
+
+  /// Reset menu to force reload (useful for switching scenarios)
+  void resetMenu() {
+    _menu = null;
+    _currentMenuIdentifier = null;
   }
 
   /// Get menu formatted for AI waiter
@@ -42,9 +134,7 @@ class MenuService {
 
       for (final item in section.items) {
         final isSafe = isItemSafeForUser(item, userAllergies);
-        final safetyIndicator = isSafe
-            ? '✅ SAFE'
-            : '⚠️  CONTAINS USER ALLERGENS';
+        final safetyIndicator = isSafe ? 'SAFE' : 'CONTAINS USER ALLERGENS';
 
         buffer.writeln('• ${item.name} - £${item.price.toStringAsFixed(2)}');
         buffer.writeln('  ${item.description}');
@@ -84,15 +174,22 @@ class MenuService {
     // Direct match
     if (normalizedUser == normalizedItem) return true;
 
-    // Check if item allergen contains user allergen
-    if (normalizedItem.contains(normalizedUser)) return true;
+    // FIXED: Prevent "fish" matching "shellfish" - check for word boundaries
+    // Only match if it's a complete word, not a substring
+    if (normalizedItem.contains(' $normalizedUser ') ||
+        normalizedItem.startsWith('$normalizedUser ') ||
+        normalizedItem.endsWith(' $normalizedUser') ||
+        normalizedItem == normalizedUser) {
+      return true;
+    }
 
-    // Special cases
+    // Special cases - FIXED: Fish ≠ Shellfish
     final synonyms = {
       'dairy': ['milk'],
       'nuts': ['tree nuts', 'tree nut'],
-      'shellfish': ['crustaceans', 'molluscs'],
+      'shellfish': ['crustaceans', 'molluscs'], // Fish is NOT shellfish!
       'wheat': ['gluten'],
+      'fish': ['finfish'], // Fish is separate from shellfish
     };
 
     for (final entry in synonyms.entries) {

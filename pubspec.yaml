@@ -92,13 +92,9 @@ flutter:
     - assets/images/characters/
     - assets/images/backgrounds/
     - assets/icons/
-    - assets/fonts/
-    - assets/audio/
     - assets/data/
-    - assets/data/scenarios/restaurant_beginner.json
+    - assets/data/scenarios/
     - assets/learn/
-    - assets/learn/educational_module.json
-    - assets/learn/behavioural_module.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

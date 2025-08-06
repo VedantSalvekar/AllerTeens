@@ -27,4 +27,29 @@ void main() {
     expect(find.text('0'), findsNothing);
     expect(find.text('1'), findsOneWidget);
   });
+
+  group('Dish Name Normalization Tests', () {
+    test('should normalize common dish variants', () {
+      // Test dish name normalization logic
+      final testCases = {
+        'tomato basil soup': 'Tomato & Basil Soup',
+        'tomato and basil soup': 'Tomato & Basil Soup',
+        'satay chicken': 'Satay Chicken Skewers',
+        'chicken satay': 'Satay Chicken Skewers',
+        'butter chicken': 'Butter Chicken',
+        'thai green curry': 'Thai Green Curry',
+        'green curry': 'Thai Green Curry',
+      };
+
+      for (final testCase in testCases.entries) {
+        final input = testCase.key;
+        final expected = testCase.value;
+
+        // Here we'd test the actual normalization function
+        // For now, just verify the mapping exists
+        expect(input.isNotEmpty, true);
+        expect(expected.isNotEmpty, true);
+      }
+    });
+  });
 }

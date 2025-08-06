@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'scenario_models.dart';
 
 /// Represents a complete training session
 class TrainingSession {
@@ -170,12 +171,28 @@ class AssessmentResult {
   // Penalty Points
   final int unsafeOrderPenalty; // -30 points for ordering unsafe food
 
-  final int totalScore; // 0-100 points
+  // Advanced Level Additional Fields
+  final int crossContaminationScore; // 0-20 points for advanced
+  final int hiddenAllergenScore; // 0-20 points for advanced
+  final int preparationMethodScore; // 0-15 points for advanced
+  final int specificIngredientScore; // 0-10 points for advanced
+  final List<String> missedActions; // Actions user forgot to perform
+  final List<String> earnedBonuses; // Bonus actions performed
+  final Map<String, int> detailedScores; // Category breakdown
+  final bool isAdvancedLevel; // Flag to determine scoring display
+
+  final int totalScore; // 0-100 points (beginner) or 0-200 points (advanced)
   final String overallGrade; // A+, A, B+, B, C+, C, D
   final List<String> strengths;
   final List<String> improvements;
   final String detailedFeedback;
   final DateTime assessedAt;
+  
+  // New fields for enhanced scoring system
+  final DifficultyLevel level; // Training difficulty level
+  final int maxPossibleScore; // Maximum possible score for this level
+  final int passingScore; // Minimum score to pass this level
+  final bool criticalFailure; // If true, user failed critically (unsafe + no disclosure)
 
   const AssessmentResult({
     required this.allergyDisclosureScore,
@@ -188,12 +205,24 @@ class AssessmentResult {
     required this.completionBonus,
     required this.improvementBonus,
     this.unsafeOrderPenalty = 0,
+    this.crossContaminationScore = 0,
+    this.hiddenAllergenScore = 0,
+    this.preparationMethodScore = 0,
+    this.specificIngredientScore = 0,
+    this.missedActions = const [],
+    this.earnedBonuses = const [],
+    this.detailedScores = const {},
+    this.isAdvancedLevel = false,
     required this.totalScore,
     required this.overallGrade,
     required this.strengths,
     required this.improvements,
     required this.detailedFeedback,
     required this.assessedAt,
+    this.level = DifficultyLevel.beginner,
+    this.maxPossibleScore = 100,
+    this.passingScore = 70,
+    this.criticalFailure = false,
   });
 
   factory AssessmentResult.fromJson(Map<String, dynamic> json) {
@@ -208,12 +237,27 @@ class AssessmentResult {
       completionBonus: json['completionBonus'],
       improvementBonus: json['improvementBonus'],
       unsafeOrderPenalty: json['unsafeOrderPenalty'] ?? 0,
+      crossContaminationScore: json['crossContaminationScore'] ?? 0,
+      hiddenAllergenScore: json['hiddenAllergenScore'] ?? 0,
+      preparationMethodScore: json['preparationMethodScore'] ?? 0,
+      specificIngredientScore: json['specificIngredientScore'] ?? 0,
+      missedActions: List<String>.from(json['missedActions'] ?? []),
+      earnedBonuses: List<String>.from(json['earnedBonuses'] ?? []),
+      detailedScores: Map<String, int>.from(json['detailedScores'] ?? {}),
+      isAdvancedLevel: json['isAdvancedLevel'] ?? false,
       totalScore: json['totalScore'],
       overallGrade: json['overallGrade'],
       strengths: List<String>.from(json['strengths'] ?? []),
       improvements: List<String>.from(json['improvements'] ?? []),
       detailedFeedback: json['detailedFeedback'],
       assessedAt: (json['assessedAt'] as Timestamp).toDate(),
+      level: DifficultyLevel.values.firstWhere(
+        (level) => level.name == json['level'],
+        orElse: () => DifficultyLevel.beginner,
+      ),
+      maxPossibleScore: json['maxPossibleScore'] ?? 100,
+      passingScore: json['passingScore'] ?? 70,
+      criticalFailure: json['criticalFailure'] ?? false,
     );
   }
 
@@ -229,12 +273,24 @@ class AssessmentResult {
       'completionBonus': completionBonus,
       'improvementBonus': improvementBonus,
       'unsafeOrderPenalty': unsafeOrderPenalty,
+      'crossContaminationScore': crossContaminationScore,
+      'hiddenAllergenScore': hiddenAllergenScore,
+      'preparationMethodScore': preparationMethodScore,
+      'specificIngredientScore': specificIngredientScore,
+      'missedActions': missedActions,
+      'earnedBonuses': earnedBonuses,
+      'detailedScores': detailedScores,
+      'isAdvancedLevel': isAdvancedLevel,
       'totalScore': totalScore,
       'overallGrade': overallGrade,
       'strengths': strengths,
       'improvements': improvements,
       'detailedFeedback': detailedFeedback,
       'assessedAt': Timestamp.fromDate(assessedAt),
+      'level': level.name,
+      'maxPossibleScore': maxPossibleScore,
+      'passingScore': passingScore,
+      'criticalFailure': criticalFailure,
     };
   }
 

@@ -1,19 +1,21 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flame/game.dart';
 import 'package:provider/provider.dart';
-import '../../services/openai_dialogue_service.dart';
 import '../../services/menu_service.dart';
+import '../../services/assessment_engine.dart';
 import '../../core/constants.dart';
 import '../../models/training_assessment.dart';
 import '../../models/game_state.dart';
 import 'ai_conversation_controller.dart';
 import 'interactive_waiter_game.dart';
-import 'training_feedback_screen.dart';
+import 'clean_feedback_screen.dart';
 
 class IntegratedConversationScreen extends StatefulWidget {
+  final String? scenarioId;
+
+  const IntegratedConversationScreen({super.key, this.scenarioId});
+
   @override
   _IntegratedConversationScreenState createState() =>
       _IntegratedConversationScreenState();
@@ -52,8 +54,8 @@ class _IntegratedConversationScreenState
       _aiController = AIConversationController();
       _setupAIControllerCallbacks();
 
-      // Initialize the controller asynchronously
-      await _aiController.initialize();
+      // Initialize the controller asynchronously with scenario ID
+      await _aiController.initialize(scenarioId: widget.scenarioId);
 
       setState(() {
         _isControllerInitialized = true;
@@ -168,7 +170,7 @@ class _IntegratedConversationScreenState
   void _showFeedbackScreen(AssessmentResult assessment) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => TrainingFeedbackScreen(
+        builder: (context) => CleanFeedbackScreen(
           assessment: assessment,
           scenarioTitle: 'Restaurant Dining - Beginner',
           onRetry: () {
@@ -232,20 +234,38 @@ class _IntegratedConversationScreenState
     try {
       // Generate assessment for incomplete conversation
       final user = await _aiController.authService.getCurrentUserModel();
-      final assessment = await _aiController.assessmentEngine
-          .assessTrainingSession(
-            conversationTurns: _aiController.conversationTurns,
-            playerProfile: PlayerProfile(
-              name: user?.name ?? 'User',
-              age: 16,
-              allergies: user?.allergies ?? [],
-              preferredName: user?.name.split(' ').first ?? 'User',
-            ),
-            scenarioId: _aiController.scenarioId,
-            sessionStart: _aiController.sessionStartTime ?? DateTime.now(),
-            sessionEnd: DateTime.now(),
-            conversationContext: _aiController.conversationContext,
-          );
+      // Try to use enhanced assessment if scenario config is available
+      AssessmentResult assessment;
+      if (_aiController.scenarioConfig != null) {
+        assessment = await AssessmentEngine.assessTrainingSessionEnhanced(
+          conversationTurns: _aiController.conversationTurns,
+          playerProfile: PlayerProfile(
+            name: user?.name ?? 'User',
+            age: 16,
+            allergies: user?.allergies ?? [],
+            preferredName: user?.name.split(' ').first ?? 'User',
+          ),
+          level: _aiController.scenarioConfig!.level,
+          conversationContext: _aiController.conversationContext,
+          scenarioId: _aiController.scenarioId,
+          sessionStart: _aiController.sessionStartTime ?? DateTime.now(),
+          sessionEnd: DateTime.now(),
+        );
+      } else {
+        assessment = await _aiController.assessmentEngine.assessTrainingSession(
+          conversationTurns: _aiController.conversationTurns,
+          playerProfile: PlayerProfile(
+            name: user?.name ?? 'User',
+            age: 16,
+            allergies: user?.allergies ?? [],
+            preferredName: user?.name.split(' ').first ?? 'User',
+          ),
+          scenarioId: _aiController.scenarioId,
+          sessionStart: _aiController.sessionStartTime ?? DateTime.now(),
+          sessionEnd: DateTime.now(),
+          conversationContext: _aiController.conversationContext,
+        );
+      }
 
       // Show feedback screen with incomplete conversation indicator
       _showFeedbackScreen(assessment);
@@ -752,6 +772,30 @@ class _IntegratedConversationScreenState
                     ),
                   ),
                   const SizedBox(width: 12),
+                  // Complete Training button
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(25),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.accent.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      onPressed: () => _showFinishTrainingDialog(),
+                      icon: Icon(
+                        Icons.check_circle,
+                        color: Colors.white,
+                        size: screenSize.width * 0.06,
+                      ),
+                      tooltip: 'Complete Training',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   // Back button with changed icon
                   Container(
                     decoration: BoxDecoration(
@@ -848,9 +892,10 @@ class _IntegratedConversationScreenState
 
   void _showMenuDialog() async {
     try {
-      // Load menu data
-      final menu = await MenuService.instance.loadMenu();
-      final menuText = MenuService.instance.formatMenuForDisplay();
+      // Load menu data based on current scenario
+      final scenarioId =
+          _aiController.currentScenarioId ?? 'restaurant_beginner';
+      final menu = await MenuService.instance.loadMenuForScenario(scenarioId);
 
       if (!mounted) return;
 
@@ -876,12 +921,7 @@ class _IntegratedConversationScreenState
           content: Container(
             width: double.maxFinite,
             constraints: const BoxConstraints(maxHeight: 400),
-            child: SingleChildScrollView(
-              child: Text(
-                menuText,
-                style: const TextStyle(fontSize: 14, height: 1.4),
-              ),
-            ),
+            child: SingleChildScrollView(child: _buildMenuContent(menu)),
           ),
           actions: [
             TextButton(
@@ -904,6 +944,91 @@ class _IntegratedConversationScreenState
     }
   }
 
+  Widget _buildMenuContent(RestaurantMenu menu) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: menu.menuSections.map((section) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                section.section.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            ...section.items.map((item) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item.name} - £${item.price.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.description,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.normal,
+                        height: 1.4,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // Display allergens with color highlighting
+                    if (item.allergens.isNotEmpty) ...[
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: item.allergens.map((allergen) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: Colors.orange.withOpacity(0.5),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              allergen,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 8),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
   void _showExitDialog() {
     showDialog(
       context: context,
@@ -920,7 +1045,8 @@ class _IntegratedConversationScreenState
             ),
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Close dialog
+                _resetControllerState(); // Reset controller state
                 Navigator.of(context).pop(); // Return to home
               },
               child: const Text('Exit'),
@@ -929,6 +1055,17 @@ class _IntegratedConversationScreenState
         );
       },
     );
+  }
+
+  void _resetControllerState() {
+    // Properly reset all controller state when exiting
+    _aiController.resetConversation();
+
+    // Reset subtitles
+    setState(() {
+      _showSubtitles = false;
+      _currentSubtitleText = null;
+    });
   }
 
   void _showErrorDialog(String title, String message) {

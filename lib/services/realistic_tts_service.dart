@@ -213,9 +213,7 @@ class RealisticTTSService {
     required bool useHighQuality,
   }) async {
     try {
-      debugPrint(
-        'RealisticTTSService: Generating speech for: "${text.substring(0, text.length > 50 ? 50 : text.length)}..."',
-      );
+      debugPrint('🤖 [AI WAITER FULL RESPONSE]: "$text"');
 
       final response = await http
           .post(
