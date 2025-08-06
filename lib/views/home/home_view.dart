@@ -15,6 +15,7 @@ import '../auth/onboarding_screen.dart';
 import '../learn/learn_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../services/emergency_service.dart';
+import '../../shared/widgets/barcode_scan_card.dart';
 
 /// Home screen with custom navigation and greeting
 class HomeView extends ConsumerStatefulWidget {
@@ -71,6 +72,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
     return Scaffold(
       backgroundColor: AppColors.white,
       body: _buildCurrentPage(firstName),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _makeEmergencyCall(context),
+        backgroundColor: const Color.fromARGB(255, 11, 193, 65),
+        child: const Icon(Icons.phone, color: Colors.white, size: 24),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       // Bottom Navigation Bar
       bottomNavigationBar: Container(
         height: 90,
@@ -147,32 +154,6 @@ class _HomeViewState extends ConsumerState<HomeView> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // Emergency call button
-                  GestureDetector(
-                    onTap: () => _makeEmergencyCall(context),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color.fromARGB(255, 11, 193, 65),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.error.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.phone,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
                   // Notification icon
                   GestureDetector(
                     onTap: () => _showPenReminderDialog(context),
@@ -390,6 +371,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
                         ),
                       ),
                     ),
+
+                    // Barcode Scan Card
+                    const BarcodeScanCard(),
 
                     // Rest of the screen content can go here
                     const Expanded(child: SizedBox()),
