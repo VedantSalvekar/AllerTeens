@@ -33,14 +33,14 @@ class MenuService {
         _menu = RestaurantMenu.fromJson(scenarioConfig.menuData!);
         _currentMenuIdentifier = menuIdentifier;
         debugPrint(
-          '✅ [MENU] Loaded menu for scenario $scenarioId with ${_menu!.getAllItems().length} items',
+          '[MENU] Loaded menu for scenario $scenarioId with ${_menu!.getAllItems().length} items',
         );
         return _menu!;
       } else {
         throw Exception('No menu data found for scenario $scenarioId');
       }
     } catch (e) {
-      debugPrint('❌ [MENU] Error loading menu for scenario $scenarioId: $e');
+      debugPrint('[MENU] Error loading menu for scenario $scenarioId: $e');
       // Fallback to default menu
       return await _loadFallbackMenu();
     }
@@ -56,7 +56,7 @@ class MenuService {
       _menu = RestaurantMenu.fromJson(menuData);
       _currentMenuIdentifier = 'provided_data';
       debugPrint(
-        '✅ [MENU] Loaded menu from provided data with ${_menu!.getAllItems().length} items',
+        '[MENU] Loaded menu from provided data with ${_menu!.getAllItems().length} items',
       );
       return _menu!;
     }
@@ -77,11 +77,11 @@ class MenuService {
       _menu = RestaurantMenu.fromJson(jsonData);
       _currentMenuIdentifier = targetMenuFile;
       debugPrint(
-        '✅ [MENU] Loaded menu from $targetMenuFile with ${_menu!.getAllItems().length} items',
+        '[MENU] Loaded menu from $targetMenuFile with ${_menu!.getAllItems().length} items',
       );
       return _menu!;
     } catch (e) {
-      debugPrint('❌ [MENU] Error loading menu from $targetMenuFile: $e');
+      debugPrint('[MENU] Error loading menu from $targetMenuFile: $e');
       rethrow;
     }
   }
@@ -91,7 +91,7 @@ class MenuService {
     try {
       return await loadMenu(menuFile: 'restaurant_menu.json');
     } catch (e) {
-      debugPrint('❌ [MENU] Even fallback menu failed to load: $e');
+      debugPrint('[MENU] Even fallback menu failed to load: $e');
       // Return minimal menu as last resort
       return RestaurantMenu(
         restaurantName: 'Fallback Restaurant',
@@ -134,9 +134,7 @@ class MenuService {
 
       for (final item in section.items) {
         final isSafe = isItemSafeForUser(item, userAllergies);
-        final safetyIndicator = isSafe
-            ? '✅ SAFE'
-            : '⚠️  CONTAINS USER ALLERGENS';
+        final safetyIndicator = isSafe ? 'SAFE' : 'CONTAINS USER ALLERGENS';
 
         buffer.writeln('• ${item.name} - £${item.price.toStringAsFixed(2)}');
         buffer.writeln('  ${item.description}');
@@ -176,15 +174,22 @@ class MenuService {
     // Direct match
     if (normalizedUser == normalizedItem) return true;
 
-    // Check if item allergen contains user allergen
-    if (normalizedItem.contains(normalizedUser)) return true;
+    // FIXED: Prevent "fish" matching "shellfish" - check for word boundaries
+    // Only match if it's a complete word, not a substring
+    if (normalizedItem.contains(' $normalizedUser ') ||
+        normalizedItem.startsWith('$normalizedUser ') ||
+        normalizedItem.endsWith(' $normalizedUser') ||
+        normalizedItem == normalizedUser) {
+      return true;
+    }
 
-    // Special cases
+    // Special cases - FIXED: Fish ≠ Shellfish
     final synonyms = {
       'dairy': ['milk'],
       'nuts': ['tree nuts', 'tree nut'],
-      'shellfish': ['crustaceans', 'molluscs'],
+      'shellfish': ['crustaceans', 'molluscs'], // Fish is NOT shellfish!
       'wheat': ['gluten'],
+      'fish': ['finfish'], // Fish is separate from shellfish
     };
 
     for (final entry in synonyms.entries) {

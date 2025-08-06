@@ -8,12 +8,92 @@ import '../core/config/app_config.dart';
 import 'openai_dialogue_service.dart';
 import '../models/scenario_models.dart';
 import 'menu_service.dart';
+import 'scoring_engine.dart';
+import 'feedback_builder.dart';
 
 /// Advanced assessment engine that analyzes AI conversations for training effectiveness
 class AssessmentEngine {
   static const String _baseUrl = 'https://api.openai.com/v1/chat/completions';
 
-  /// Assess a complete training session and generate comprehensive feedback
+  /// NEW: Assess training session using the enhanced level-based scoring system
+  static Future<AssessmentResult> assessTrainingSessionEnhanced({
+    required List<ConversationTurn> conversationTurns,
+    required PlayerProfile playerProfile,
+    required DifficultyLevel level,
+    required ConversationContext conversationContext,
+    required String scenarioId,
+    required DateTime sessionStart,
+    required DateTime sessionEnd,
+  }) async {
+    debugPrint(
+      '🎯 [ASSESSMENT] Starting enhanced assessment for level: $level',
+    );
+
+    try {
+      // Use the new scoring engine
+      var assessmentResult = await ScoringEngine.scoreTrainingSession(
+        conversationTurns: conversationTurns,
+        playerProfile: playerProfile,
+        level: level,
+        conversationContext: conversationContext,
+        scenarioId: scenarioId,
+        sessionStart: sessionStart,
+        sessionEnd: sessionEnd,
+      );
+
+      // Generate enhanced feedback using FeedbackBuilder
+      final feedbackResult = FeedbackBuilder.generateFeedback(
+        assessment: assessmentResult,
+        level: level,
+      );
+
+      // Return updated assessment with enhanced feedback (replacing duplicates)
+      return AssessmentResult(
+        allergyDisclosureScore: assessmentResult.allergyDisclosureScore,
+        clarityScore: assessmentResult.clarityScore,
+        proactivenessScore: assessmentResult.proactivenessScore,
+        ingredientInquiryScore: assessmentResult.ingredientInquiryScore,
+        riskAssessmentScore: assessmentResult.riskAssessmentScore,
+        confidenceScore: assessmentResult.confidenceScore,
+        politenessScore: assessmentResult.politenessScore,
+        completionBonus: assessmentResult.completionBonus,
+        improvementBonus: assessmentResult.improvementBonus,
+        unsafeOrderPenalty: assessmentResult.unsafeOrderPenalty,
+        crossContaminationScore: assessmentResult.crossContaminationScore,
+        hiddenAllergenScore: assessmentResult.hiddenAllergenScore,
+        preparationMethodScore: assessmentResult.preparationMethodScore,
+        specificIngredientScore: assessmentResult.specificIngredientScore,
+        missedActions: assessmentResult.missedActions,
+        earnedBonuses: assessmentResult.earnedBonuses,
+        detailedScores: assessmentResult.detailedScores,
+        isAdvancedLevel: assessmentResult.isAdvancedLevel,
+        totalScore: assessmentResult.totalScore,
+        overallGrade: assessmentResult.overallGrade,
+        strengths: feedbackResult.strengths, // Use FeedbackBuilder strengths (replaces ScoringEngine ones)
+        improvements: feedbackResult.improvements, // Use FeedbackBuilder improvements (replaces ScoringEngine ones) 
+        detailedFeedback: feedbackResult.feedbackParagraph,
+        assessedAt: assessmentResult.assessedAt,
+        level: assessmentResult.level,
+        maxPossibleScore: assessmentResult.maxPossibleScore,
+        passingScore: assessmentResult.passingScore,
+        criticalFailure: assessmentResult.criticalFailure,
+      );
+    } catch (e) {
+      debugPrint('🚨 [ASSESSMENT] Enhanced assessment failed: $e');
+      // Fallback to legacy assessment
+      final assessmentEngine = AssessmentEngine();
+      return await assessmentEngine.assessTrainingSession(
+        conversationTurns: conversationTurns,
+        playerProfile: playerProfile,
+        scenarioId: scenarioId,
+        sessionStart: sessionStart,
+        sessionEnd: sessionEnd,
+        conversationContext: conversationContext,
+      );
+    }
+  }
+
+  /// LEGACY: Assess a complete training session and generate comprehensive feedback
   Future<AssessmentResult> assessTrainingSession({
     required List<ConversationTurn> conversationTurns,
     required PlayerProfile playerProfile,

@@ -155,7 +155,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
                       height: 36,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppColors.error,
+                        color: const Color.fromARGB(255, 11, 193, 65),
                         boxShadow: [
                           BoxShadow(
                             color: AppColors.error.withOpacity(0.3),
@@ -1588,6 +1588,38 @@ class _ScenarioSelectionContentState
                         color: Colors.grey,
                       ),
                     ),
+                    const SizedBox(height: 6),
+                    // Display allergens with color highlighting
+                    if (item.allergens.isNotEmpty) ...[
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: item.allergens.map((allergen) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: Colors.orange.withOpacity(0.5),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              allergen,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ],
                 ),
               );

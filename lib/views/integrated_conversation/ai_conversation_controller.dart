@@ -7,6 +7,7 @@ import '../../models/game_state.dart';
 import '../../models/simulation_step.dart';
 import '../../models/training_assessment.dart';
 import '../../models/scenario_config.dart';
+import '../../models/scenario_models.dart';
 import 'interactive_waiter_game.dart';
 import '../../services/prompt_builder.dart';
 import '../../services/scenario_loader.dart';
@@ -111,18 +112,15 @@ class AIConversationController extends ChangeNotifier {
       );
 
       print(
-        '✅ [AI_CONTROLLER] Loaded scenario: ${_scenarioConfig!.name} (${_scenarioConfig!.level.toString().split('.').last})',
+        '[AI_CONTROLLER] Loaded scenario: ${_scenarioConfig!.name} (${_scenarioConfig!.level.toString().split('.').last})',
       );
 
-      // ✅ Load scenario-specific menu
       try {
         await MenuService.instance.loadMenuForScenario(_currentScenarioId!);
-        print(
-          '✅ [AI_CONTROLLER] Loaded menu for scenario: $_currentScenarioId',
-        );
+        print('[AI_CONTROLLER] Loaded menu for scenario: $_currentScenarioId');
       } catch (e) {
         print(
-          '❌ [AI_CONTROLLER] Failed to load menu for scenario $_currentScenarioId: $e',
+          '[AI_CONTROLLER] Failed to load menu for scenario $_currentScenarioId: $e',
         );
         // Fallback to default menu
         await MenuService.instance.loadMenu();
@@ -156,15 +154,53 @@ class AIConversationController extends ChangeNotifier {
 
   void _startConversation() {
     _openaiService.resetConversation();
-    _addMessage(
-      "Welcome! Let me know whenever you're ready to order.",
-      role: 'assistant',
-    );
+
+    // Use varied natural greetings based on difficulty level
+    final greetings = _getVariedGreetings();
+    final selectedGreeting =
+        greetings[DateTime.now().millisecond % greetings.length];
+
+    _addMessage(selectedGreeting, role: 'assistant');
     _setAnimation('greeting');
     Future.delayed(
       const Duration(milliseconds: 500),
-      () => _speak("Welcome! Let me know whenever you're ready to order."),
+      () => _speak(selectedGreeting),
     );
+  }
+
+  List<String> _getVariedGreetings() {
+    // Get difficulty level from scenario config
+    final level = _scenarioConfig?.level ?? DifficultyLevel.beginner;
+
+    switch (level) {
+      case DifficultyLevel.beginner:
+        return [
+          "Hello, are you ready to order?",
+          "Hi there! Welcome!",
+          "Hey, what can I get for you today?",
+          "Welcome! How can I help you?",
+        ];
+      case DifficultyLevel.intermediate:
+        return [
+          "Hi, how are you today?",
+          "Hello, what can I get started for you?",
+          "Good evening, ready to order?",
+          "Welcome! Have you had a chance to look at the menu?",
+        ];
+      case DifficultyLevel.advanced:
+        return [
+          "Hello, welcome! Have you had time to look at the menu?",
+          "Hi, are you ready to order?",
+          "Good evening, what can I get for you?",
+          "Welcome! Ready when you are.",
+        ];
+      default:
+        return [
+          "Hello, are you ready to order?",
+          "Hi there! Welcome!",
+          "Welcome! How can I help you?",
+        ];
+    }
   }
 
   Future<void> processUserInput(String input) async {
@@ -181,7 +217,6 @@ class AIConversationController extends ChangeNotifier {
 
     _turnCount++;
 
-    // ✅ NEW: AI handles all analysis - no manual phrase detection needed
     final aiResponse = await _openaiService.getOpenAIResponse(
       userInput: input,
       currentStep: _scenarioStep!,
@@ -208,7 +243,6 @@ class AIConversationController extends ChangeNotifier {
       scenarioConfig: _scenarioConfig,
     );
 
-    // ✅ NEW: Use AI-analyzed context directly
     _context = aiResponse.updatedContext;
 
     // Update allergy mention count for prompt building
@@ -250,15 +284,39 @@ class AIConversationController extends ChangeNotifier {
     final userIndicatesCompletion =
         lastUserInput == 'no' ||
         lastUserInput == 'nope' ||
-        lastUserInput.contains('thank you') ||
-        lastUserInput.contains('thanks') ||
+        (lastUserInput.contains('thank you') &&
+            lastUserInput.length < 15) || // Only short thank you responses
+        (lastUserInput.contains('thanks') &&
+            lastUserInput.length < 15 &&
+            !lastUserInput.contains('can')) || // Thanks without ordering
         lastUserInput.contains('no questions') ||
         lastUserInput.contains('i\'m good') ||
         lastUserInput.contains('that\'s all') ||
         lastUserInput.contains('i don\'t need') ||
-        lastUserInput.contains('nothing else');
+        lastUserInput.contains('nothing else') ||
+        lastUserInput == 'perfect' ||
+        lastUserInput == 'great';
 
-    // Check if user is just asking questions (don't end training)
+    // Check if user is confirming their order (after AI asks for confirmation)
+    final isConfirmingOrder =
+        lastUserInput == 'yes' ||
+        lastUserInput == 'correct' ||
+        lastUserInput == 'right' ||
+        lastUserInput.contains('that\'s right') ||
+        lastUserInput.contains('that\'s correct') ||
+        lastUserInput.contains('that\'s grand') ||
+        lastUserInput.contains('yes, that\'s') ||
+        (lastUserInput.contains('yes') && lastUserInput.length < 10);
+
+    // Check if user is asking for order repetition
+    final isAskingForOrderRepeat =
+        lastUserInput.contains('repeat my order') ||
+        lastUserInput.contains('repeat the order') ||
+        lastUserInput.contains('what did i order') ||
+        lastUserInput.contains('can you repeat') ||
+        (lastUserInput.contains('repeat') && lastUserInput.contains('order'));
+
+    // Check if user is asking questions or seeking safety information (don't end training)
     final isJustAskingQuestions =
         lastUserInput.contains('what can i have') ||
         lastUserInput.contains('what can i eat') ||
@@ -268,6 +326,58 @@ class AIConversationController extends ChangeNotifier {
         lastUserInput.contains('recommend') ||
         lastUserInput.contains('suggest') ||
         lastUserInput.contains('menu');
+
+    // Enhanced: Check if user is asking safety-related questions
+    final isAskingSafetyQuestions =
+        lastUserInput.contains('cross') ||
+        lastUserInput.contains('contamination') ||
+        lastUserInput.contains('contact') ||
+        lastUserInput.contains('check with') ||
+        lastUserInput.contains('chef') ||
+        lastUserInput.contains('kitchen') ||
+        lastUserInput.contains('safe') ||
+        lastUserInput.contains('allergen') ||
+        lastUserInput.contains('ingredient') ||
+        lastUserInput.contains('contain') ||
+        lastUserInput.contains('preparation') ||
+        lastUserInput.contains('prepared') ||
+        lastUserInput.contains('cook') ||
+        lastUserInput.contains('made with') ||
+        lastUserInput.contains('oil') ||
+        lastUserInput.contains('fryer') ||
+        lastUserInput.contains('clean') ||
+        lastUserInput.contains('separate') ||
+        lastUserInput.contains('shared') ||
+        lastUserInput.contains('equipment') ||
+        lastUserInput.contains('sauce') ||
+        lastUserInput.contains('dressing') ||
+        lastUserInput.contains('seasoning') ||
+        lastUserInput.contains('can you') ||
+        lastUserInput.contains('could you') ||
+        lastUserInput.contains('would you') ||
+        lastUserInput.contains('are you able') ||
+        input.contains('?'); // Any question should extend conversation
+
+    // Enhanced: Check if user is expressing ongoing safety concerns
+    final hasOngoingSafetyConcerns =
+        lastUserInput.contains('really allergic') ||
+        lastUserInput.contains('very allergic') ||
+        lastUserInput.contains('severely allergic') ||
+        lastUserInput.contains('serious') ||
+        lastUserInput.contains('important') ||
+        lastUserInput.contains('need to') ||
+        lastUserInput.contains('have to') ||
+        lastUserInput.contains('must') ||
+        lastUserInput.contains('reaction') ||
+        lastUserInput.contains('dangerous') ||
+        lastUserInput.contains('worry') ||
+        lastUserInput.contains('concerned') ||
+        lastUserInput.contains('sure that') ||
+        lastUserInput.contains('make sure') ||
+        lastUserInput.contains('also') ||
+        lastUserInput.contains('but') ||
+        lastUserInput.contains('and') ||
+        lastUserInput.contains('because');
 
     // Check if AI just gave a safety warning about the current order
     final aiJustGaveSafetyWarning =
@@ -282,52 +392,94 @@ class AIConversationController extends ChangeNotifier {
           'consider a different dish',
         );
 
+    // Level-aware minimum turn requirements
+    int minTurnsForLevel = 3;
+    if (_scenarioConfig != null) {
+      switch (_scenarioConfig!.level) {
+        case DifficultyLevel.beginner:
+          minTurnsForLevel = 3; // More interaction time for practice
+          break;
+        case DifficultyLevel.intermediate:
+          minTurnsForLevel = 4; // More thorough discussion
+          break;
+        case DifficultyLevel.advanced:
+          minTurnsForLevel =
+              5; // Comprehensive safety conversation with challenges
+          break;
+      }
+    }
+
     // Priority 1: AI explicitly indicates conversation should end
     if (aiResponse.shouldEndConversation) {
       shouldEnd = true;
       endReason = 'AI indicated conversation should end';
     }
-    // Priority 2: User completed order AND indicates completion (regardless of allergy disclosure)
-    else if (_context.selectedDish != null &&
+    // Priority 2: User confirms their order (natural ending)
+    else if (isConfirmingOrder &&
+        _context.selectedDish != null &&
         _context.confirmedDish &&
-        userIndicatesCompletion &&
-        !aiJustGaveSafetyWarning) {
+        !isAskingSafetyQuestions &&
+        !hasOngoingSafetyConcerns &&
+        _turnCount >= minTurnsForLevel) {
       shouldEnd = true;
-      endReason = 'User completed order and indicated satisfaction';
+      endReason = 'User confirmed their order - natural ending';
     }
-    // Priority 3: Complete interaction - user ordered food AND disclosed allergies AND no safety warning AND not asking questions
+    // Priority 3: User explicitly indicates they want to end/are satisfied
+    else if (userIndicatesCompletion &&
+        !isAskingSafetyQuestions &&
+        !hasOngoingSafetyConcerns &&
+        _turnCount >= minTurnsForLevel) {
+      shouldEnd = true;
+      endReason = 'User explicitly indicated satisfaction';
+    }
+    // Priority 3: NEVER end if user is actively asking safety questions or expressing concerns
+    else if (isAskingSafetyQuestions || hasOngoingSafetyConcerns) {
+      shouldEnd = false;
+      endReason = 'User still has safety questions or concerns';
+    }
+    // Priority 4: Natural completion - order complete, allergies handled, conversation feels concluded
     else if (_context.selectedDish != null &&
         _context.confirmedDish &&
         _context.allergiesDisclosed &&
         !aiJustGaveSafetyWarning &&
         !isJustAskingQuestions &&
-        _turnCount >= 2) {
-      shouldEnd = true;
-      endReason =
-          'Complete interaction: order placed and allergies disclosed safely';
-    }
-    // Priority 4: Realistic restaurant flow - natural conversation completion
-    else if (_context.selectedDish != null &&
-        _context.confirmedDish &&
-        _turnCount >= 3 &&
-        !isJustAskingQuestions &&
-        !aiJustGaveSafetyWarning) {
-      shouldEnd = true;
-      endReason = 'Natural restaurant conversation completion';
+        !isAskingSafetyQuestions &&
+        !hasOngoingSafetyConcerns &&
+        _turnCount >= minTurnsForLevel) {
+      // Additional check: Make sure AI's last response feels conclusive
+      final aiSoundsConclusive =
+          aiResponse.npcDialogue.toLowerCase().contains('enjoy') ||
+          aiResponse.npcDialogue.toLowerCase().contains('perfect') ||
+          aiResponse.npcDialogue.toLowerCase().contains('all set') ||
+          aiResponse.npcDialogue.toLowerCase().contains('thank you') ||
+          aiResponse.npcDialogue.toLowerCase().contains('you\'re welcome') ||
+          aiResponse.npcDialogue.toLowerCase().contains('sounds good') ||
+          aiResponse.npcDialogue.toLowerCase().contains('great choice') ||
+          aiResponse.npcDialogue.toLowerCase().contains('coming right up') ||
+          aiResponse.npcDialogue.toLowerCase().contains('be right out');
+
+      if (aiSoundsConclusive) {
+        shouldEnd = true;
+        endReason = 'Natural conversation conclusion with order completed';
+      }
     }
     // Priority 5: Reasonable conversation length (prevent infinite loops)
-    else if (_turnCount >= 8) {
+    else if (_turnCount >= 10) {
       shouldEnd = true;
       endReason = 'Maximum conversation length reached (${_turnCount} turns)';
     }
 
     debugPrint('🔍 [CONVERSATION] Checking end conditions:');
-    debugPrint('  - turnCount: $_turnCount');
+    debugPrint('  - turnCount: $_turnCount (min required: $minTurnsForLevel)');
     debugPrint('  - allergiesDisclosed: ${_context.allergiesDisclosed}');
     debugPrint('  - selectedDish: ${_context.selectedDish}');
     debugPrint('  - confirmedDish: ${_context.confirmedDish}');
     debugPrint('  - userIndicatesCompletion: $userIndicatesCompletion');
+    debugPrint('  - isConfirmingOrder: $isConfirmingOrder');
+    debugPrint('  - isAskingForOrderRepeat: $isAskingForOrderRepeat');
     debugPrint('  - isJustAskingQuestions: $isJustAskingQuestions');
+    debugPrint('  - isAskingSafetyQuestions: $isAskingSafetyQuestions');
+    debugPrint('  - hasOngoingSafetyConcerns: $hasOngoingSafetyConcerns');
     debugPrint('  - aiJustGaveSafetyWarning: $aiJustGaveSafetyWarning');
     debugPrint('  - shouldEnd: $shouldEnd');
     debugPrint('  - endReason: $endReason');
@@ -378,21 +530,43 @@ class AIConversationController extends ChangeNotifier {
       durationMinutes: endTime.difference(_startTime!).inMinutes,
     );
 
-    final assessment = await _assessmentEngine.assessTrainingSession(
-      conversationTurns: _turns,
-      playerProfile: PlayerProfile(
-        name: user.name,
-        preferredName: user.name.split(' ').first,
-        age: 16,
-        allergies: user.allergies,
-      ),
-      scenarioId: _session!.scenarioId,
-      sessionStart: _session!.startTime,
-      sessionEnd: endTime,
-      conversationContext: _context,
-      scenarioConfig:
-          _scenarioConfig, // ✅ Use loaded scenario config for level-aware assessment
-    );
+    // Try to use enhanced assessment if scenario config is available
+    AssessmentResult assessment;
+    if (_scenarioConfig != null) {
+      debugPrint(
+        '[CONTROLLER] Using enhanced assessment for level: ${_scenarioConfig!.level}',
+      );
+      assessment = await AssessmentEngine.assessTrainingSessionEnhanced(
+        conversationTurns: _turns,
+        playerProfile: PlayerProfile(
+          name: user.name,
+          preferredName: user.name.split(' ').first,
+          age: 16,
+          allergies: user.allergies,
+        ),
+        level: _scenarioConfig!.level,
+        conversationContext: _context,
+        scenarioId: _session!.scenarioId,
+        sessionStart: _session!.startTime,
+        sessionEnd: endTime,
+      );
+    } else {
+      debugPrint('[CONTROLLER] Using legacy assessment - no scenario config');
+      assessment = await _assessmentEngine.assessTrainingSession(
+        conversationTurns: _turns,
+        playerProfile: PlayerProfile(
+          name: user.name,
+          preferredName: user.name.split(' ').first,
+          age: 16,
+          allergies: user.allergies,
+        ),
+        scenarioId: _session!.scenarioId,
+        sessionStart: _session!.startTime,
+        sessionEnd: endTime,
+        conversationContext: _context,
+        scenarioConfig: _scenarioConfig,
+      );
+    }
 
     try {
       await _progressService.saveTrainingSession(completedSession);
@@ -413,9 +587,78 @@ class AIConversationController extends ChangeNotifier {
   }
 
   // Call this from the UI when the user taps 'Finish Training' in the dialog
-  void finishTrainingAndShowFeedback() {
+  void finishTrainingAndShowFeedback() async {
     if (_assessment != null && onSessionCompleted != null) {
       onSessionCompleted!(_assessment!);
+    } else {
+      // Create assessment for manual completion if none exists
+      try {
+        final user = await _authService.getCurrentUserModel();
+        if (user != null) {
+          // Generate assessment for manual completion
+          AssessmentResult assessment;
+          if (_scenarioConfig != null) {
+            assessment = await AssessmentEngine.assessTrainingSessionEnhanced(
+              conversationTurns: _turns,
+              playerProfile: PlayerProfile(
+                name: user.name,
+                preferredName: user.name.split(' ').first,
+                age: 16,
+                allergies: user.allergies,
+              ),
+              level: _scenarioConfig!.level,
+              conversationContext: _context,
+              scenarioId: _currentScenarioId ?? '',
+              sessionStart: _startTime ?? DateTime.now(),
+              sessionEnd: DateTime.now(),
+            );
+          } else {
+            assessment = await _assessmentEngine.assessTrainingSession(
+              conversationTurns: _turns,
+              playerProfile: PlayerProfile(
+                name: user.name,
+                preferredName: user.name.split(' ').first,
+                age: 16,
+                allergies: user.allergies,
+              ),
+              scenarioId: _currentScenarioId ?? '',
+              sessionStart: _startTime ?? DateTime.now(),
+              sessionEnd: DateTime.now(),
+              conversationContext: _context,
+            );
+          }
+
+          _assessment = assessment;
+          if (onSessionCompleted != null) {
+            onSessionCompleted!(_assessment!);
+          }
+        }
+      } catch (e) {
+        debugPrint('Error creating manual completion assessment: $e');
+        // Show fallback assessment
+        final fallbackAssessment = AssessmentResult(
+          allergyDisclosureScore: _context.allergiesDisclosed ? 8 : 4,
+          clarityScore: 6,
+          proactivenessScore: 5,
+          ingredientInquiryScore: 4,
+          riskAssessmentScore: 5,
+          confidenceScore: 6,
+          politenessScore: 7,
+          completionBonus: 0,
+          improvementBonus: 0,
+          totalScore: 35,
+          overallGrade: 'C',
+          strengths: ['Participated in training'],
+          improvements: ['Continue practicing to improve skills'],
+          detailedFeedback:
+              'Training completed manually. Keep practicing to improve your allergy communication skills!',
+          assessedAt: DateTime.now(),
+        );
+        _assessment = fallbackAssessment;
+        if (onSessionCompleted != null) {
+          onSessionCompleted!(_assessment!);
+        }
+      }
     }
   }
 

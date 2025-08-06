@@ -236,56 +236,56 @@ class ScenarioDataProvider {
         rewards: ['Advanced communication badge', 'Professional dining skills'],
       ),
 
-      TrainingScenario(
-        id: 'takeaway_beginner',
-        title: 'Takeaway Order',
-        description: 'Order food safely from a takeaway restaurant',
-        iconPath: 'assets/icons/takeaway.png',
-        type: ScenarioType.takeaway,
-        difficulty: DifficultyLevel.beginner,
-        learningObjectives: [
-          'Mention allergies during phone/counter ordering',
-          'Ask about preparation methods',
-          'Confirm packaging safety',
-        ],
-        scenarioData: {
-          'setting': 'Pizza place',
-          'npcRole': 'Takeaway staff',
-          'complexity': 'low',
-          'prompts': 'high',
-        },
-        accentColor: const Color(0xFFFF9800),
-        estimatedDuration: 2,
-        isUnlocked: false,
-        requiredScore: 80,
-        rewards: ['Takeaway safety badge'],
-      ),
+      // TrainingScenario(
+      //   id: 'takeaway_beginner',
+      //   title: 'Takeaway Order',
+      //   description: 'Order food safely from a takeaway restaurant',
+      //   iconPath: 'assets/icons/takeaway.png',
+      //   type: ScenarioType.takeaway,
+      //   difficulty: DifficultyLevel.beginner,
+      //   learningObjectives: [
+      //     'Mention allergies during phone/counter ordering',
+      //     'Ask about preparation methods',
+      //     'Confirm packaging safety',
+      //   ],
+      //   scenarioData: {
+      //     'setting': 'Pizza place',
+      //     'npcRole': 'Takeaway staff',
+      //     'complexity': 'low',
+      //     'prompts': 'high',
+      //   },
+      //   accentColor: const Color(0xFFFF9800),
+      //   estimatedDuration: 2,
+      //   isUnlocked: false,
+      //   requiredScore: 80,
+      //   rewards: ['Takeaway safety badge'],
+      // ),
 
-      // INTERMEDIATE LEVEL SCENARIOS
-      TrainingScenario(
-        id: 'party_intermediate',
-        title: 'Birthday Party',
-        description:
-            'Handle social pressure and peer interactions at a friend\'s party',
-        iconPath: 'assets/icons/party.png',
-        type: ScenarioType.party,
-        difficulty: DifficultyLevel.intermediate,
-        learningObjectives: [
-          'Communicate with party hosts',
-          'Handle peer pressure appropriately',
-          'Suggest safe alternatives',
-        ],
-        scenarioData: {
-          'setting': 'Friend\'s birthday party',
-          'npcRole': 'Party host parent',
-          'complexity': 'medium',
-          'prompts': 'medium',
-        },
-        accentColor: const Color(0xFF9C27B0),
-        estimatedDuration: 5,
-        requiredScore: 150,
-        rewards: ['Social confidence badge', 'Party safety points'],
-      ),
+      // // INTERMEDIATE LEVEL SCENARIOS
+      // TrainingScenario(
+      //   id: 'party_intermediate',
+      //   title: 'Birthday Party',
+      //   description:
+      //       'Handle social pressure and peer interactions at a friend\'s party',
+      //   iconPath: 'assets/icons/party.png',
+      //   type: ScenarioType.party,
+      //   difficulty: DifficultyLevel.intermediate,
+      //   learningObjectives: [
+      //     'Communicate with party hosts',
+      //     'Handle peer pressure appropriately',
+      //     'Suggest safe alternatives',
+      //   ],
+      //   scenarioData: {
+      //     'setting': 'Friend\'s birthday party',
+      //     'npcRole': 'Party host parent',
+      //     'complexity': 'medium',
+      //     'prompts': 'medium',
+      //   },
+      //   accentColor: const Color(0xFF9C27B0),
+      //   estimatedDuration: 5,
+      //   requiredScore: 150,
+      //   rewards: ['Social confidence badge', 'Party safety points'],
+      // ),
 
       // OTHER SCENARIOS
       TrainingScenario(

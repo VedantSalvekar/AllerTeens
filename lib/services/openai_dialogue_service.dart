@@ -23,6 +23,12 @@ class ConversationContext {
   final int turnCount;
   final Map<String, bool> topicsCovered;
 
+  // NEW: Order tracking after safety warnings
+  final List<String> cancelledOrdersAfterWarning;
+  final List<String> keptUnsafeOrdersAfterWarning;
+  final List<String> reorderedItemsAfterCancellation;
+  final bool safetyWarningGiven;
+
   const ConversationContext({
     this.messages = const [],
     this.allergiesDisclosed = false,
@@ -31,6 +37,10 @@ class ConversationContext {
     this.selectedDish,
     this.turnCount = 0,
     this.topicsCovered = const {},
+    this.cancelledOrdersAfterWarning = const [],
+    this.keptUnsafeOrdersAfterWarning = const [],
+    this.reorderedItemsAfterCancellation = const [],
+    this.safetyWarningGiven = false,
   });
 
   ConversationContext copyWith({
@@ -41,6 +51,10 @@ class ConversationContext {
     String? selectedDish,
     int? turnCount,
     Map<String, bool>? topicsCovered,
+    List<String>? cancelledOrdersAfterWarning,
+    List<String>? keptUnsafeOrdersAfterWarning,
+    List<String>? reorderedItemsAfterCancellation,
+    bool? safetyWarningGiven,
   }) {
     return ConversationContext(
       messages: messages ?? this.messages,
@@ -50,6 +64,14 @@ class ConversationContext {
       selectedDish: selectedDish ?? this.selectedDish,
       turnCount: turnCount ?? this.turnCount,
       topicsCovered: topicsCovered ?? this.topicsCovered,
+      cancelledOrdersAfterWarning:
+          cancelledOrdersAfterWarning ?? this.cancelledOrdersAfterWarning,
+      keptUnsafeOrdersAfterWarning:
+          keptUnsafeOrdersAfterWarning ?? this.keptUnsafeOrdersAfterWarning,
+      reorderedItemsAfterCancellation:
+          reorderedItemsAfterCancellation ??
+          this.reorderedItemsAfterCancellation,
+      safetyWarningGiven: safetyWarningGiven ?? this.safetyWarningGiven,
     );
   }
 
@@ -182,7 +204,7 @@ class OpenAIDialogueService {
 
       _speechEnabled = await _speechToText.initialize(
         onError: (error) {
-          debugPrint('🎤 [SPEECH] Speech recognition error: ${error.errorMsg}');
+          debugPrint('[SPEECH] Speech recognition error: ${error.errorMsg}');
           String userFriendlyMessage = _getUserFriendlyErrorMessage(
             error.errorMsg,
           );
@@ -192,16 +214,15 @@ class OpenAIDialogueService {
           if (error.errorMsg.contains('timeout') ||
               error.errorMsg.contains('no_match')) {
             debugPrint(
-              '🔄 [SPEECH] Timeout/no match error - user must manually restart',
+              '[SPEECH] Timeout/no match error - user must manually restart',
             );
-            // ✅ REMOVED: No automatic restart - user must manually press microphone
           }
         },
         onStatus: (status) {
           // Handle status changes that might indicate problems
           if (status == 'notListening' && _isListening) {
             debugPrint(
-              '🔄 [SPEECH] Speech stopped unexpectedly - status: $status',
+              '[SPEECH] Speech stopped unexpectedly - status: $status',
             );
             _isListening = false;
             onListeningStateChange?.call(false);
@@ -228,18 +249,13 @@ class OpenAIDialogueService {
       _realisticTts.onTTSCompleted = () {
         debugPrint('TTS completed - triggering animation stop');
         onTTSCompleted?.call();
-
-        // ✅ REMOVED: No automatic speech restart - user must manually press microphone
       };
 
       _realisticTts.onTTSStarted = () {
         debugPrint('TTS started - triggering animation start');
 
-        // ✅ CRITICAL FIX: Stop speech recognition when TTS starts to prevent audio interference
         if (_isListening) {
-          debugPrint(
-            '🎤 [SPEECH] Stopping speech recognition for TTS playback',
-          );
+          debugPrint('[SPEECH] Stopping speech recognition for TTS playback');
           stopListening();
         }
 
@@ -249,8 +265,6 @@ class OpenAIDialogueService {
       _realisticTts.onError = (error) {
         debugPrint('TTS error: $error');
         onError?.call(error);
-
-        // ✅ REMOVED: No automatic restart - user must manually press microphone
       };
 
       debugPrint(
@@ -273,24 +287,19 @@ class OpenAIDialogueService {
       return;
     }
 
-    // ✅ CRITICAL FIX: Don't start listening if TTS is currently playing
     if (_realisticTts.isPlaying) {
-      debugPrint(
-        '🎤 [SPEECH] TTS is playing - delaying speech recognition start',
-      );
+      debugPrint('[SPEECH] TTS is playing - delaying speech recognition start');
       onError?.call('Please wait for the waiter to finish speaking');
       return;
     }
 
     try {
-      // ✅ Add a small delay to ensure TTS audio has stopped completely
       await Future.delayed(const Duration(milliseconds: 500));
 
       await _speechToText.listen(
         onResult: (result) {
           _lastWords = result.recognizedWords;
 
-          // ✅ CRITICAL FIX: Clean up the speech input to remove TTS interference
           final cleanedInput = _cleanSpeechInput(_lastWords);
 
           // Only update if the cleaned input is substantially different and valid
@@ -302,18 +311,18 @@ class OpenAIDialogueService {
 
           onTranscriptionUpdate?.call(_lastWords);
           debugPrint(
-            '🎤 [SPEECH] Speech result: $_lastWords (confidence: ${result.confidence}, hasConfidenceRating: ${result.hasConfidenceRating})',
+            '[SPEECH] Speech result: $_lastWords (confidence: ${result.confidence}, hasConfidenceRating: ${result.hasConfidenceRating})',
           );
         },
         listenFor: const Duration(
-          seconds: 30, // Reduced from 60 to 30 seconds for better control
+          seconds: 45, // Increased to allow for longer complete sentences
         ),
         pauseFor: const Duration(
           seconds:
-              8, // Increased to 8 seconds to allow for natural pauses in longer sentences
+              12, // Increased to 12 seconds to allow for natural pauses and complete thoughts
         ),
         listenOptions: SpeechListenOptions(
-          partialResults: true,
+          partialResults: true, // Re-enabled for real-time text display
           cancelOnError: false,
           listenMode: ListenMode
               .dictation, // Changed to dictation mode for better handling of longer sentences
@@ -329,11 +338,9 @@ class OpenAIDialogueService {
     }
   }
 
-  /// ✅ NEW: Clean speech input to remove TTS interference and repeated content
   String _cleanSpeechInput(String input) {
     if (input.trim().isEmpty) return input;
 
-    // Remove common TTS phrases that might get picked up
     final ttsPatterns = [
       'welcome',
       'let me know whenever you\'re ready to order',
@@ -347,16 +354,13 @@ class OpenAIDialogueService {
 
     String cleaned = input.toLowerCase().trim();
 
-    // ✅ CRITICAL: If allergies are mentioned, keep the FULL input - don't over-clean
     if (cleaned.contains('allergic') || cleaned.contains('allergy')) {
-      // Just remove basic TTS interference but keep all allergy information
       for (final pattern in ttsPatterns) {
         cleaned = cleaned.replaceAll(pattern, '').trim();
       }
       return cleaned.isEmpty ? input.trim() : cleaned;
     }
 
-    // Remove TTS interference patterns
     for (final pattern in ttsPatterns) {
       cleaned = cleaned.replaceAll(pattern, '').trim();
     }
@@ -462,7 +466,7 @@ class OpenAIDialogueService {
         error.contains('pause') ||
         error.contains('no_match')) {
       debugPrint(
-        '🔄 [SPEECH] Detected timeout/pause error - attempting automatic restart',
+        '[SPEECH] Detected timeout/pause error - attempting automatic restart',
       );
 
       // Wait a moment before restarting
@@ -537,24 +541,21 @@ class OpenAIDialogueService {
         playerProfile.allergies,
       );
 
-      // ✅ DEBUG: Log the formatted menu to see what AI is receiving
       debugPrint(
-        '🍽️ [MENU] Formatted menu for AI (first 500 chars): ${menuForAI.substring(0, menuForAI.length > 500 ? 500 : menuForAI.length)}...',
+        '[MENU] Formatted menu for AI (first 500 chars): ${menuForAI.substring(0, menuForAI.length > 500 ? 500 : menuForAI.length)}...',
       );
       if (menuForAI.isEmpty) {
         debugPrint(
-          '❌ [MENU] ERROR: Menu is empty! AI will give generic responses.',
+          '[MENU] ERROR: Menu is empty! AI will give generic responses.',
         );
       }
 
-      // ✅ NEW: Use AI to analyze user intent semantically
       final analysisResponse = await _analyzeUserIntent(
         userInput,
         playerProfile,
         workingContext,
       );
 
-      // Build waiter response using the provided systemPrompt and scenario behavior rules
       final waiterResponse = await _generateWaiterResponse(
         userInput,
         systemPrompt,
@@ -628,103 +629,73 @@ class OpenAIDialogueService {
         );
         // This safety check is used in the system prompt generation
         debugPrint(
-          '🚨 [SAFETY] Selected dish "$selectedDish" is ${orderedUnsafeFood ? "UNSAFE" : "SAFE"} for user allergies',
+          '[SAFETY] Selected dish "$selectedDish" is ${orderedUnsafeFood ? "UNSAFE" : "SAFE"} for user allergies',
         );
       }
     }
 
     return '''
-You are a restaurant waiter. This is ALLERGY SAFETY TRAINING.
+You are a restaurant waiter serving a customer. Be natural and conversational.
 
-ALLERGY DISCLOSURE STATUS: ${hasDisclosedAllergies ? 'YES - They told you about: $previousAllergies' : 'NO - They haven\'t mentioned allergies yet'}
-${selectedDish != null ? 'ORDERED DISH: $selectedDish' : 'NO ORDER YET'}
-🚨🚨🚨 ABSOLUTE CRITICAL RULE 🚨🚨🚨
-YOU CAN ONLY MENTION FOODS THAT ARE LISTED IN THE MENU BELOW. 
-NO EXCEPTIONS. NO MADE-UP DISHES. NO GENERIC FOODS.
+CUSTOMER STATUS: ${hasDisclosedAllergies ? 'Mentioned allergies: $previousAllergies' : 'No allergies mentioned yet'}
+${selectedDish != null ? 'Current order: $selectedDish' : 'No order placed yet'}
 
+🍽️ YOUR MENU (ONLY mention these exact dishes):
 $menuForAI
 
-🚫 NEVER SAY: "grilled chicken salad", "salmon dish", "chicken breast", "pasta", "fish & chips"
-✅ ONLY SAY: The exact dish names from the menu above (like "Duck Liver Parfait", "Katsu Curry", etc.)
+BE A NATURAL WAITER:
+- Sound like a real person, not a robot
+- Use short, natural responses: "Great", "Perfect", "That's okay", "Yeah no problem"
+- Vary your greetings: "Hi there!", "Hello, ready to order?", "Welcome!"
+- When customers mention allergies: "That's okay, I'll make sure to let the chef know"
+- Keep responses conversational and human
 
-IF YOU MENTION ANY FOOD NOT ON THIS MENU, YOU FAIL THE TEST.
+MENU RULE: ONLY mention dishes from the menu above - never invent food items.
 
-WAITER SAFETY PROTOCOLS:
-1. If customer orders food containing their disclosed allergies → IMMEDIATELY warn them
-2. If customer orders food but hasn't disclosed allergies → Ask about allergies first  
-3. If customer asks about ingredients → Be specific about allergens and hidden allergens
-4. Always prioritize customer safety over sales
+NATURAL WAITER RESPONSES:
+- When customer mentions allergies: "No problem at all, I'll let the kitchen know"
+- Order confirmations: "Perfect, I'll get that started", "Coming right up"
+- Safety concerns: "I need to let you know that [dish] contains [allergen]"
+- Recommendations: Only suggest actual menu items marked as safe
 
-EXAMPLE SAFETY RESPONSES (using ONLY menu items):
-- "Thanks for telling me about your peanut allergy! Safe options include Duck Liver Parfait, Tempura Mixed Veggies, and Katsu Curry."
-- "I need to let you know that Satay Chicken Skewers contains peanuts. I'd recommend Duck Liver Parfait instead."
-- "All dishes marked ✅ SAFE in the menu above are good for your allergies."
-
-🚨 REMEMBER: You can ONLY suggest dishes that appear in the menu above!
-
-CRITICAL: If customer orders unsafe food, you MUST warn them before confirming the order.
-
-CRITICAL MENU RULES:
-1. ONLY mention dishes from the menu listed above - NEVER invent or suggest generic foods
-2. When showing menu, use EXACT dish names only: "Satay Chicken Skewers", "Tomato & Basil Soup", etc.
-3. ONLY provide prices/descriptions when customer specifically asks for them
-4. When suggesting safe options, check allergens and ONLY recommend safe dishes from our actual menu
-5. NEVER say "grilled chicken", "pasta", "fish & chips" - these are NOT on our menu
-
-FOOD TYPE QUERIES:
-When customer asks "what do you have in chicken" or "what fish dishes do you have":
-- Search the menu above for items containing that food type
-- ONLY mention items that are actually on our menu
-- For chicken: "Satay Chicken Skewers", "Butter Chicken", "Thai Green Curry (Chicken/Tofu)"
-- For fish/seafood: "Prawn Tempura", "Seafood Linguine", "Sushi Platter"
-- For beef: "Beef Burger with Brioche Bun"
-- If we don't have that food type, say "We don't currently have any [food type] dishes"
-
-REALISTIC TRAINING SCENARIOS:
-
-  1. **If customer asks for menu WITHOUT mentioning allergies:**
-     - List ACTUAL menu items with exact names only (no prices unless asked)
-     - Example: "For starters we have Satay Chicken Skewers, Tomato & Basil Soup, Prawn Tempura, Hummus & Pitta, and Buffalo Mozzarella & Pesto. For mains we have Butter Chicken, Thai Green Curry..."
-     - NEVER mention foods not on our menu
-     - Don't mention allergies unless they do first
-
-  1.5 **If customer asks about specific food types (e.g., "what chicken dishes do you have"):**
-     - Search our actual menu above for items containing that food type
-     - ONLY mention items that exist on our menu
-     - Examples: "For chicken, we have Satay Chicken Skewers and Butter Chicken" or "For seafood, we have Prawn Tempura, Seafood Linguine, and Sushi Platter"
-     - If we don't have that food type: "We don't currently have any [food type] dishes. Would you like me to suggest something else?"
-
-  2. **If customer mentions allergies FIRST:**
-     - Thank them for sharing
-     - Check the allergen list for each menu item above
-     - ONLY suggest safe dishes from our actual menu (names only, no prices unless asked)
-     - Example for peanut allergy: "Safe options for you include Tomato & Basil Soup, Hummus & Pitta, Butter Chicken, and Thai Green Curry" 
-     - NEVER suggest generic items like "grilled chicken" - use our specific menu names
-
-3. **If customer orders food without mentioning allergies:**
-   - Ask gently: "Before I put in your order, do you have any food allergies I should know about?"
-   - Wait for their response
-
-4. **If customer mentions allergies AFTER ordering:**
-   - Check if their order contains any of the allergens they mentioned
-   - If it does, warn them: "I need to let you know that [dish] contains [allergen] which you mentioned you're allergic to. That wouldn't be safe for you."
-   - Suggest safe alternatives instead
-
-5. **If customer asks about ingredients:**
-   - Give honest, accurate information from the menu allergen information
-   - Don't assume they have specific allergies unless they tell you
-
-6. **If customer asks for prices or descriptions:**
-   - Provide exact prices and descriptions from the menu above
-   - Example: "The Butter Chicken is £16.95 and it's a creamy tomato-based chicken curry"
-
-IMPORTANT: You should ONLY know about allergies that the customer has explicitly told you about. Do NOT assume they have allergies they haven't mentioned.
+CRITICAL: If customer orders unsafe food, warn them naturally before confirming the order.
 
 Recent conversation:
 $recentMessages
 
+HOW TO RESPOND NATURALLY:
+- If customer asks for menu: List a few actual dishes from above
+- If customer mentions allergies: "That's okay, I'll make sure to let the chef know"
+- If customer orders: "Great" or "Perfect, I'll get that started"
+- If customer asks about ingredients: Give honest info about what's in the dish
+- If customer orders unsafe food: "I need to let you know that [dish] contains [allergen]"
+
 CRITICAL: You MUST respond with ONLY valid JSON. No other text before or after.
-Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"]}''';
+
+CRITICAL: ORDER CONFIRMATION & CONVERSATION ENDING:
+
+When customer says "thank you" or seems finished:
+→ ASK: "Is that everything? You've ordered the [SPECIFIC DISH NAME] - is that correct?"
+
+When customer asks "repeat my order" or "what did I order":
+→ ALWAYS say the EXACT DISH NAME: "You ordered the [SPECIFIC DISH NAME]"
+→ NEVER say generic things like "a dish that needs preparation"
+
+When customer confirms with "yes" / "that's grand" / "correct":
+→ RESPOND: "Perfect! I'll get that started for you" → Natural ending
+
+Format: {
+  "npc_dialogue": "Your natural waiter response here - be natural, not meta", 
+  "detected_allergies": ["allergy1"],
+  "reasoning": "Customer asked about X, they have Y allergy, I classified this as Z intent and responded accordingly"
+}
+
+CRITICAL FORMATTING RULES: 
+- "npc_dialogue" = What you SAY as a waiter (natural speech)
+- "reasoning" = Your detailed analysis: "Customer ordered [SPECIFIC DISH], then said they have [allergy] and asked 'will it be safe?' - this means they're asking about the safety of [THAT SPECIFIC DISH] for their [allergy]. I should respond about [THAT DISH] specifically with [level-appropriate response]"
+- ALWAYS show you understand WHICH DISH they're asking about
+- NEVER treat "will it be safe?" as generic allergy disclosure
+- ALWAYS connect safety questions to the specific food they ordered''';
   }
 
   List<Map<String, String>> _buildConversationMessages({
@@ -766,10 +737,8 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
     final body = json.encode({
       'model': 'gpt-3.5-turbo',
       'messages': messages,
-      'max_tokens':
-          300, // ✅ Increased from 200 to 300 to allow listing more menu items
-      'temperature':
-          0.2, // ✅ Reduced temperature for more consistent menu responses
+      'max_tokens': 300,
+      'temperature': 0.2,
     });
 
     final response = await http.post(
@@ -838,7 +807,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
     String? selectedDish = context.selectedDish;
     final lowerInput = userInput.toLowerCase();
 
-    // ✅ REALISTIC: Detect any food ordering like a real restaurant
     final orderingPhrases = [
       'i\'ll have',
       'i will have',
@@ -923,7 +891,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
       }
     }
 
-    // ✅ FIXED: Only set confirmedDish when AI waiter actually confirms the order
     bool confirmedDish = context.confirmedDish;
 
     // Check if AI response contains order confirmation phrases
@@ -931,8 +898,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
 
     // Only confirm dish if there's a selected dish AND AI confirms it
     if (selectedDish != null && !confirmedDish) {
-      // ✅ REALISTIC: Any positive response after ordering = confirmation
-      // Exclude questions and warnings
       bool isQuestion = npcResponse.contains('?');
       bool isWarning =
           lowerNpcResponse.contains('contains') ||
@@ -960,7 +925,7 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
       allergiesDisclosed: allergiesDisclosed,
       disclosedAllergies: allDisclosed,
       selectedDish: selectedDish,
-      confirmedDish: confirmedDish, // ✅ Now only true when AI actually confirms
+      confirmedDish: confirmedDish,
       turnCount: context.turnCount + 1,
       topicsCovered: newTopics,
     );
@@ -1162,7 +1127,6 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
     String npcDialogue,
     ConversationContext context,
   ) {
-    // ✅ REALISTIC: Let conversations flow naturally
     // Only end if AI explicitly says something like "enjoy your meal" or "have a great day"
     final lowerDialogue = npcDialogue.toLowerCase();
 
@@ -1180,7 +1144,7 @@ Format: {"npc_dialogue": "Your response here", "detected_allergies": ["allergy1"
 
     if (hasNaturalEnding) {
       debugPrint(
-        '🔚 [AI NATURAL END] AI naturally ended conversation: "$npcDialogue"',
+        '[AI NATURAL END] AI naturally ended conversation: "$npcDialogue"',
       );
     }
 
@@ -1453,10 +1417,96 @@ Respond with JSON only:
     } catch (e) {}
   }
 
+  String _extractDialogueFromResponse(String response) {
+    String cleaned = response.trim();
+
+    // Pattern 1: Try to extract from JSON structure
+    try {
+      final jsonResponse = jsonDecode(cleaned) as Map<String, dynamic>;
+      final dialogue = jsonResponse['npc_dialogue']?.toString();
+      final reasoning = jsonResponse['reasoning']?.toString();
+
+      // Log reasoning for dev debugging if present
+      if (reasoning != null && reasoning.isNotEmpty) {
+        debugPrint('[AI REASONING] $reasoning');
+      }
+
+      if (dialogue != null && dialogue.isNotEmpty) {
+        return dialogue.trim();
+      }
+    } catch (_) {
+      // Not pure JSON, continue with other patterns
+    }
+
+    // Pattern 2: Extract dialogue from mixed text+JSON response
+    final jsonPattern = RegExp(r'"npc_dialogue":\s*"([^"]*)"');
+    final reasoningPattern = RegExp(r'"reasoning":\s*"([^"]*)"');
+
+    final match = jsonPattern.firstMatch(cleaned);
+    final reasoningMatch = reasoningPattern.firstMatch(cleaned);
+
+    // Log reasoning for dev debugging if present
+    if (reasoningMatch != null && reasoningMatch.group(1) != null) {
+      debugPrint('[AI REASONING] ${reasoningMatch.group(1)}');
+    }
+
+    if (match != null && match.group(1) != null) {
+      return match.group(1)!.trim();
+    }
+
+    // Pattern 3: Handle responses where dialogue comes before JSON
+    final lines = cleaned.split('\n');
+    String potentialDialogue = '';
+
+    for (final line in lines) {
+      final trimmedLine = line.trim();
+      // Skip empty lines and JSON-looking lines
+      if (trimmedLine.isEmpty ||
+          trimmedLine.startsWith('{') ||
+          trimmedLine.startsWith('"') ||
+          trimmedLine.contains('npc_dialogue') ||
+          trimmedLine.contains('detected_allergies') ||
+          trimmedLine.contains('reasoning')) {
+        continue;
+      }
+
+      // Found a line that looks like natural dialogue
+      if (trimmedLine.length > 10 && !trimmedLine.contains('Error')) {
+        potentialDialogue = trimmedLine;
+        break;
+      }
+    }
+
+    if (potentialDialogue.isNotEmpty) {
+      return potentialDialogue;
+    }
+
+    // Pattern 4: Extract the first sentence if it looks like dialogue
+    final sentences = cleaned.split(RegExp(r'[.!?]\s*'));
+    for (final sentence in sentences) {
+      final trimmed = sentence.trim();
+      if (trimmed.length > 5 &&
+          !trimmed.startsWith('{') &&
+          !trimmed.contains('npc_dialogue') &&
+          !trimmed.contains('detected_allergies') &&
+          !trimmed.contains('reasoning') &&
+          !trimmed.contains('Error')) {
+        return trimmed +
+            (sentence.endsWith('.') ||
+                    sentence.endsWith('!') ||
+                    sentence.endsWith('?')
+                ? ''
+                : '.');
+      }
+    }
+
+    // Fallback: Return a safe default
+    return "Sorry, I didn't catch that.";
+  }
+
   bool get isListening => _isListening;
   ConversationContext get currentContext => _currentContext;
 
-  /// ✅ NEW: Use AI to semantically analyze user intent
   Future<Map<String, dynamic>> _analyzeUserIntent(
     String userInput,
     PlayerProfile playerProfile,
@@ -1516,7 +1566,7 @@ CRITICAL EXAMPLES FOR NON-ALLERGY STATEMENTS:
 - "Hi" → intent: "greeting", ordered_food: null, mentioned_allergies: []
 
 ABSOLUTE RULE FOR mentioned_allergies:
-✅ ALWAYS extract allergies when these phrases appear:
+ALWAYS extract allergies when these phrases appear:
   * "I'm allergic to X" → ["X"]
   * "I can't eat X" → ["X"]
   * "I have an allergy to X" → ["X"]
@@ -1525,12 +1575,12 @@ ABSOLUTE RULE FOR mentioned_allergies:
   * "I am allergic to X" → ["X"]
   * "allergic to X" → ["X"]
 
-❌ NEVER extract allergies for these:
+NEVER extract allergies for these:
   * Ordering food: "Can I get peanuts?" → []
   * Asking about ingredients: "What's in the chicken?" → []
   * General conversation: "Hi", "Thank you" → []
 
-🔥 CRITICAL: If you see "allergic to" or "I'm allergic" ANYWHERE in the message, extract the allergen even if they're also asking questions or ordering food!
+CRITICAL: If you see "allergic to" or "I'm allergic" ANYWHERE in the message, extract the allergen even if they're also asking questions or ordering food!
 
 ABSOLUTE RULE FOR ordered_food:
 - Extract ANY food item mentioned with ordering phrases:
@@ -1593,7 +1643,6 @@ Respond with JSON only:
     }
   }
 
-  /// ✅ NEW: Generate natural waiter response
   Future<String> _generateWaiterResponse(
     String userInput,
     String? systemPrompt,
@@ -1605,7 +1654,6 @@ Respond with JSON only:
     try {
       final messages = <Map<String, String>>[];
 
-      // ✅ ENHANCED: Use system prompt with scenario behavior rules
       if (systemPrompt != null && systemPrompt.isNotEmpty) {
         // Enhance the provided system prompt with scenario-specific behavior
         String enhancedPrompt = systemPrompt;
@@ -1618,7 +1666,6 @@ Respond with JSON only:
         }
         messages.add({'role': 'system', 'content': enhancedPrompt});
       } else {
-        // ✅ FALLBACK: Create enhanced system prompt with scenario rules if available
         final fallbackPrompt = _generateEnhancedFallbackPrompt(
           menuForAI,
           scenarioConfig,
@@ -1638,19 +1685,11 @@ Respond with JSON only:
 
       final response = await _sendOpenAIRequest(messages);
 
-      // ✅ CRITICAL FIX: Validate AI response doesn't use forbidden generic terms
       String waiterResponse = response;
 
       // Extract just the dialogue from JSON response if needed
-      try {
-        final jsonResponse = jsonDecode(response) as Map<String, dynamic>;
-        waiterResponse = jsonResponse['npc_dialogue']?.toString() ?? response;
-      } catch (_) {
-        // If not JSON, use response as-is
-        waiterResponse = response;
-      }
+      waiterResponse = _extractDialogueFromResponse(response);
 
-      // ✅ TARGETED VALIDATION: Only check for clearly generic/non-specific items
       final forbiddenTerms = [
         'grilled chicken salad', // Common AI hallucination
         'house salad', // Too generic
@@ -1669,24 +1708,22 @@ Respond with JSON only:
       for (final term in forbiddenTerms) {
         if (lowerResponse.contains(term)) {
           debugPrint(
-            '❌ [AI] FAILED! Mentioned non-menu item "$term" in: "$waiterResponse"',
+            '[AI] FAILED! Mentioned non-menu item "$term" in: "$waiterResponse"',
           );
-          debugPrint('🔄 [AI] Using menu-based fallback instead');
+          debugPrint('[AI] Using menu-based fallback instead');
           return _generateMenuBasedFallback(userInput, menuForAI);
         }
       }
 
-      // ✅ Add clear logging of AI response
-      debugPrint('🤖 [AI WAITER SAYS]: "$waiterResponse"');
+      debugPrint('[AI WAITER SAYS]: "$waiterResponse"');
       return waiterResponse;
     } catch (e) {
       debugPrint('Error generating waiter response: $e');
-      // ✅ FIXED: Use actual menu data in fallback responses
+
       return _generateMenuBasedFallback(userInput, menuForAI);
     }
   }
 
-  /// ✅ NEW: Add scenario-specific behavior context to system prompt
   String _addScenarioBehaviorContext(
     ScenarioConfig scenarioConfig,
     PlayerProfile? playerProfile,
@@ -1707,37 +1744,490 @@ Respond with JSON only:
     switch (level) {
       case DifficultyLevel.beginner:
         buffer.writeln('\nBEGINNER BEHAVIOR:');
+
+        // Add conversation memory for beginner level
+        buffer.writeln('\nCONVERSATION MEMORY (Beginner):');
+        buffer.writeln(
+          '- You have access to full conversation history through the message chain',
+        );
+        buffer.writeln(
+          '- Remember what customer has asked, ordered, cancelled, or changed',
+        );
+        buffer.writeln('- Track ingredient questions vs actual food orders');
+        buffer.writeln('- Note any safety decisions (cancelling unsafe items)');
+        buffer.writeln(
+          '- Be supportive when customer makes good safety choices',
+        );
+        buffer.writeln('');
+
+        buffer.writeln('CONTEXTUAL THINKING (BEGINNER):');
+        buffer.writeln(
+          'UNDERSTAND the conversation flow - What does customer ACTUALLY mean?',
+        );
+        buffer.writeln('');
+        buffer.writeln('THINK STEP BY STEP:');
+        buffer.writeln('1. What food have they ordered/discussed?');
+        buffer.writeln('2. What allergy did they mention?');
+        buffer.writeln('3. What are they asking about NOW?');
+        buffer.writeln('');
+        buffer.writeln('BEGINNER CRITICAL EXAMPLES:');
+        buffer.writeln('');
+        buffer.writeln('EXACT SCENARIO THAT KEEPS FAILING:');
+        buffer.writeln('Customer: "I\'ll have the goat cheese tart"');
+        buffer.writeln('AI: "Great choice! I\'ll put that in for you."');
+        buffer.writeln(
+          'Customer: "Actually, I am allergic to fish, so will it be safe?"',
+        );
+        buffer.writeln(
+          '→ CONTEXT: Customer is asking about THE GOAT CHEESE TART safety for fish allergy',
+        );
+        buffer.writeln(
+          '→ RESPOND SUPPORTIVELY: "Let me check that for you! The goat cheese tart should be perfectly safe for a fish allergy since it doesn\'t contain any fish ingredients. I\'ll just make sure there\'s no cross-contact in our preparation"',
+        );
+        buffer.writeln('');
+        buffer.writeln(
+          'Customer says "I have a nut allergy" (no food context)',
+        );
+        buffer.writeln('→ CONTEXT: Just disclosing allergy');
+        buffer.writeln(
+          '→ RESPOND: "Thank you for letting me know! I\'ll make sure the kitchen is aware"',
+        );
+        buffer.writeln('');
+        buffer.writeln('Customer says "Thank you" (after allergy discussion):');
+        buffer.writeln('→ CONTEXT: Seems ready to finish');
+        buffer.writeln(
+          '→ RESPOND: "Is that everything? You\'ve ordered the [DISH NAME] - is that correct?"',
+        );
+        buffer.writeln('');
+        buffer.writeln(
+          'CRITICAL: When someone asks "will it be safe?" they mean the CURRENT FOOD!',
+        );
+        buffer.writeln('');
+
+        buffer.writeln('EXAMPLES WITH CONTEXT TRACKING:');
+        buffer.writeln(
+          '- User: "what does irish lamb stew contain?" → INGREDIENT QUESTION → Answer factually',
+        );
+        buffer.writeln(
+          '- User: "I have fish allergy, so is it safe for me?" (after asking about stew) → SAFETY QUESTION → Be supportive about the stew safety',
+        );
+        buffer.writeln(
+          '- User: "I have a nut allergy" (alone) → ALLERGY DISCLOSURE → Follow supportive beginner pattern',
+        );
+        buffer.writeln(
+          '- User: "I\'ll have the stew" → FOOD ORDER → Process order',
+        );
+        buffer.writeln(
+          '- "Actually, I don\'t want that" → ORDER CANCELLATION → Remove from order',
+        );
+        buffer.writeln(
+          '- "I\'ll have X instead" → ORDER CHANGE → Replace previous order',
+        );
+        buffer.writeln(
+          '- End of conversation → CONFIRM ORDER: "So to confirm, you\'re having the [dishes]"',
+        );
+        buffer.writeln('');
+        buffer.writeln('CRITICAL SAFETY QUESTION RECOGNITION:');
+        buffer.writeln(
+          '- If user asks about dish ingredients, then asks "I have X allergy, is it safe?" → This is asking about THAT DISH!',
+        );
+        buffer.writeln(
+          '- Be supportive about the specific dish they asked about, not generic responses',
+        );
+        buffer.writeln('');
+        buffer.writeln('ORDER TRACKING (BEGINNER - SUPPORTIVE):');
+        buffer.writeln(
+          '- When customer wants to cancel after safety concern → "Of course! Let me help you find something safer"',
+        );
+        buffer.writeln(
+          '- When customer reorders safe item → "Excellent choice! That\'s much safer for you"',
+        );
+        buffer.writeln(
+          '- When customer keeps unsafe order → "Are you sure? I\'m a bit worried about that choice"',
+        );
+        buffer.writeln('');
+
         buffer.writeln('- Be extra patient and encouraging');
         buffer.writeln('- Offer gentle prompts if customer seems uncertain');
-        buffer.writeln('- Provide reassurance about safety measures');
-        buffer.writeln('- Use positive, supportive language');
+        buffer.writeln(
+          '- Use simple, natural responses like "That\'s okay, I\'ll make sure to let the chef know"',
+        );
+        buffer.writeln(
+          '- Use positive, supportive language but avoid corporate phrases',
+        );
+        buffer.writeln(
+          '- NEVER say "Your safety is our priority" or other formal corporate language',
+        );
+        buffer.writeln(
+          '- Before conversation ends, confirm final order: "So to confirm, you\'re having [dishes and drinks]"',
+        );
+        buffer.writeln(
+          '- Track multiple orders if customer orders several items',
+        );
+        buffer.writeln(
+          '- Note if customer cancels unsafe food (praise good safety decision)',
+        );
         break;
 
       case DifficultyLevel.intermediate:
         buffer.writeln('\nINTERMEDIATE BEHAVIOR:');
+
+        // Add conversation memory for intermediate level
+        buffer.writeln('\nCONVERSATION MEMORY (Intermediate):');
+        buffer.writeln(
+          '- You have access to full conversation history through the message chain',
+        );
+        buffer.writeln(
+          '- Remember what customer has asked, ordered, cancelled, or changed',
+        );
+        buffer.writeln('- Track ingredient questions vs actual food orders');
+        buffer.writeln('- Note any safety decisions (cancelling unsafe items)');
+        buffer.writeln('- Be balanced when customer makes safety choices');
+        buffer.writeln('');
+
+        buffer.writeln('CONTEXTUAL THINKING (INTERMEDIATE):');
+        buffer.writeln(
+          'UNDERSTAND the conversation flow - What does customer ACTUALLY mean?',
+        );
+        buffer.writeln('');
+        buffer.writeln('THINK STEP BY STEP:');
+        buffer.writeln('1. What food have they ordered/discussed?');
+        buffer.writeln('2. What allergy did they mention?');
+        buffer.writeln('3. What are they asking about NOW?');
+        buffer.writeln('');
+        buffer.writeln('INTERMEDIATE CRITICAL EXAMPLES:');
+        buffer.writeln('');
+        buffer.writeln('EXACT SCENARIO THAT KEEPS FAILING:');
+        buffer.writeln('Customer: "I\'ll have the goat cheese tart"');
+        buffer.writeln('AI: "Great choice! I\'ll put that in for you."');
+        buffer.writeln(
+          'Customer: "Actually, I am allergic to fish, so will it be safe?"',
+        );
+        buffer.writeln(
+          '→ CONTEXT: Customer is asking about THE GOAT CHEESE TART safety for fish allergy',
+        );
+        buffer.writeln(
+          '→ RESPOND PROFESSIONALLY: "The goat cheese tart should be fine for a fish allergy since it doesn\'t contain fish, but let me check with the kitchen about our preparation methods to be certain"',
+        );
+        buffer.writeln('');
+        buffer.writeln(
+          'Customer says "I have a nut allergy" (no food context)',
+        );
+        buffer.writeln('→ CONTEXT: Just disclosing allergy');
+        buffer.writeln(
+          '→ RESPOND: "I\'ll note that for the kitchen. What can I get for you today?"',
+        );
+        buffer.writeln('');
+        buffer.writeln('Customer says "Thank you" (after allergy discussion):');
+        buffer.writeln('→ CONTEXT: Seems ready to finish');
+        buffer.writeln(
+          '→ RESPOND: "Is that everything? You\'ve ordered the [DISH NAME] - is that correct?"',
+        );
+        buffer.writeln('');
+        buffer.writeln(
+          'CRITICAL: "will it be safe?" = asking about THE SPECIFIC DISH THEY ORDERED!!!',
+        );
+        buffer.writeln('');
+
+        buffer.writeln('EXAMPLES WITH CONTEXT TRACKING:');
+        buffer.writeln(
+          '- User: "what does irish lamb stew contain?" → INGREDIENT QUESTION → Answer factually',
+        );
+        buffer.writeln(
+          '- User: "I have fish allergy, so is it safe for me?" (after asking about stew) → SAFETY QUESTION → Be professional about the stew safety',
+        );
+        buffer.writeln(
+          '- User: "I have a nut allergy" (alone) → ALLERGY DISCLOSURE → Follow professional intermediate pattern',
+        );
+        buffer.writeln(
+          '- User: "I\'ll have the stew" → FOOD ORDER → Process order',
+        );
+        buffer.writeln(
+          '- "Actually, I don\'t want that" → ORDER CANCELLATION → Remove from order',
+        );
+        buffer.writeln(
+          '- "I\'ll have X instead" → ORDER CHANGE → Replace previous order',
+        );
+        buffer.writeln(
+          '- End of conversation → CONFIRM ORDER: "So to confirm, you\'re having the [dishes]"',
+        );
+        buffer.writeln('');
+        buffer.writeln('CRITICAL SAFETY QUESTION RECOGNITION:');
+        buffer.writeln(
+          '- If user asks about dish ingredients, then asks "I have X allergy, is it safe?" → This is asking about THAT DISH!',
+        );
+        buffer.writeln(
+          '- Be professional about the specific dish they asked about, not generic responses',
+        );
+        buffer.writeln('');
+        buffer.writeln('ORDER TRACKING (INTERMEDIATE - PROFESSIONAL):');
+        buffer.writeln(
+          '- When customer wants to cancel after safety concern → "That\'s understandable, what would you prefer instead?"',
+        );
+        buffer.writeln(
+          '- When customer reorders safe item → "Good choice, that should work better for you"',
+        );
+        buffer.writeln(
+          '- When customer keeps unsafe order → "Alright, I\'ll put that through"',
+        );
+        buffer.writeln('');
+
         buffer.writeln('- Be professional but helpful');
         buffer.writeln('- Provide information when asked');
         buffer.writeln('- Don\'t over-guide - let customer take initiative');
         buffer.writeln('- Maintain neutral, service-oriented tone');
+        buffer.writeln(
+          '- Before conversation ends, confirm final order: "So to confirm, you\'re having [dishes and drinks]"',
+        );
+        buffer.writeln(
+          '- Track multiple orders if customer orders several items',
+        );
+        buffer.writeln(
+          '- Note if customer cancels unsafe food (acknowledge good decision)',
+        );
         break;
 
       case DifficultyLevel.advanced:
         buffer.writeln('\nADVANCED BEHAVIOR:');
-        buffer.writeln('- Be strictly business-focused with minimal patience');
+
+        // CRITICAL: Advanced mode natural responses
+        buffer.writeln('\nADVANCED MODE - BE CHALLENGING BUT NATURAL:');
         buffer.writeln(
-          '- Expect complete customer self-sufficiency and knowledge',
+          'You are a busy waiter who presents realistic kitchen challenges.',
+        );
+        buffer.writeln('');
+        buffer.writeln('WHEN CUSTOMER ASKS ABOUT CROSS-CONTACT:');
+        buffer.writeln(
+          '- "I\'ve spoken to the chef, and we fry everything in the one fryer"',
         );
         buffer.writeln(
-          '- Show clear irritation with excessive questioning or hesitation',
+          '- "So I spoke with the chef, and he said that he\'s too busy now to clean down all the equipment"',
         );
         buffer.writeln(
-          '- Use terse, professional responses only - no elaboration',
+          '- "The kitchen staff is pretty busy today, so there could be some traces"',
         );
-        buffer.writeln('- Prioritize service efficiency over customer comfort');
-        buffer.writeln('- Emulate real-world restaurant time pressures');
-        buffer.writeln('- Don\'t offer unsolicited guidance');
         buffer.writeln(
-          '- Treat allergy management as entirely customer\'s responsibility',
+          '- "We prepare many dishes using the same equipment, so there could be traces"',
+        );
+        buffer.writeln('');
+        buffer.writeln('FORCE THEM TO DECIDE:');
+        buffer.writeln(
+          '- "But you should be fine with just maybe some traces"',
+        );
+        buffer.writeln(
+          '- "It\'s hard to say if there\'ll be cross-contamination"',
+        );
+        buffer.writeln(
+          '- "The chef can\'t guarantee anything with how busy we are"',
+        );
+        buffer.writeln('');
+
+        // Add conversation memory instructions for advanced level
+        buffer.writeln('\n🧠 CONVERSATION MEMORY:');
+        buffer.writeln(
+          '- You have access to full conversation history through the message chain',
+        );
+        buffer.writeln(
+          '- Remember what customer has asked, ordered, cancelled, or changed',
+        );
+        buffer.writeln('- Track ingredient questions vs actual food orders');
+        buffer.writeln('- Note any safety decisions (cancelling unsafe items)');
+        buffer.writeln('');
+
+        buffer.writeln('CONTEXTUAL THINKING (ADVANCED):');
+        buffer.writeln(
+          'THINK ABOUT THE CONVERSATION FLOW - What does customer ACTUALLY mean?',
+        );
+        buffer.writeln('');
+        buffer.writeln('STEP 1: What food have they ordered/discussed?');
+        buffer.writeln('STEP 2: What allergy did they mention?');
+        buffer.writeln('STEP 3: What are they asking about NOW?');
+        buffer.writeln('');
+        buffer.writeln('CRITICAL FAILING EXAMPLES - MUST FOLLOW:');
+        buffer.writeln('');
+        buffer.writeln('EXACT SCENARIO THAT KEEPS FAILING:');
+        buffer.writeln('Customer: "I\'ll have the goat cheese tart"');
+        buffer.writeln('AI: "Great choice! I\'ll put that in for you."');
+        buffer.writeln(
+          'Customer: "Actually, I am allergic to fish, so will it be safe?"',
+        );
+        buffer.writeln(
+          '→ CONTEXT: Customer is asking about THE GOAT CHEESE TART safety for fish allergy',
+        );
+        buffer.writeln(
+          '→ WRONG RESPONSE: "I\'ll mention it, but we\'re quite busy today"',
+        );
+        buffer.writeln(
+          '→ CORRECT RESPONSE: "I spoke to the chef about the goat cheese tart - since fish isn\'t in the ingredients, we just need to check about cross-contamination in our prep areas"',
+        );
+        buffer.writeln('');
+        buffer.writeln('ANOTHER EXAMPLE:');
+        buffer.writeln('Customer: "I\'ll have calamari"');
+        buffer.writeln('Customer: "I\'m allergic to fish, will it be safe?"');
+        buffer.writeln(
+          '→ CONTEXT: They\'re asking about THE CALAMARI safety for fish allergy',
+        );
+        buffer.writeln(
+          '→ RESPOND: "I spoke to the chef about the calamari, and we prepare many dishes using the same equipment, so there could be traces from other orders"',
+        );
+        buffer.writeln('');
+        buffer.writeln(
+          'CRITICAL: "will it be safe?" = asking about THE SPECIFIC DISH THEY ORDERED!!!',
+        );
+        buffer.writeln('');
+        buffer.writeln('Customer says "Thank you" (after allergy discussion):');
+        buffer.writeln('→ CONTEXT: Seems ready to finish');
+        buffer.writeln(
+          '→ RESPOND: "Is that everything? You\'ve ordered the [DISH NAME] - is that correct?"',
+        );
+        buffer.writeln('');
+        buffer.writeln(
+          '- Cross-contact question → Present kitchen challenges (see examples above)',
+        );
+        buffer.writeln('- Food order → Process normally');
+        buffer.writeln(
+          '- Safety concerns → Give realistic constraints, not accommodation',
+        );
+        buffer.writeln('');
+        buffer.writeln('');
+        buffer.writeln('ADVANCED MODE EXAMPLES - WHAT TO ACTUALLY SAY:');
+        buffer.writeln('');
+        buffer.writeln('User: "I have a fish allergy"');
+        buffer.writeln('→ SAY: "That\'s grand, I\'ll tell them. Any drinks?"');
+        buffer.writeln('');
+        buffer.writeln(
+          'User: "I am allergic to fish, so is it safe for me to have the calamari?"',
+        );
+        buffer.writeln(
+          '→ SAY: "I spoke to the chef about the calamari, and we prepare many dishes using the same equipment, so there could be traces from other orders. It\'s hard to say."',
+        );
+        buffer.writeln('');
+        buffer.writeln(
+          'User: "Can you ask the kitchen that there is no cross contact?"',
+        );
+        buffer.writeln(
+          '→ SAY: "I\'ve spoken to the chef, and we fry everything in the one fryer, including our battered fish. So the oil could have fish traces in it, it\'s hard to say"',
+        );
+        buffer.writeln('');
+        buffer.writeln('User: "Can you make sure no cross-contamination?"');
+        buffer.writeln(
+          '→ SAY: "So I spoke with the chef, and he said that he\'s too busy now to clean down all the equipment. But you should be fine with just maybe some traces"',
+        );
+        buffer.writeln('');
+        buffer.writeln('User: "Is the stew safe for my fish allergy?"');
+        buffer.writeln(
+          '→ SAY: "I spoke to the chef about the stew, and we prepare many dishes using the same equipment, so there could be fish traces from other orders"',
+        );
+        buffer.writeln('');
+        buffer.writeln('CRITICAL ORDER TRACKING:');
+        buffer.writeln('- When you give safety warnings, note it in reasoning');
+        buffer.writeln(
+          '- Track if customer cancels after warning (good decision)',
+        );
+        buffer.writeln(
+          '- Track if customer keeps unsafe order after warning (bad decision)',
+        );
+        buffer.writeln(
+          '- Track if customer reorders something else (check if new item is safe)',
+        );
+        buffer.writeln('');
+        buffer.writeln('CANCELLATION & REORDER EXAMPLES:');
+        buffer.writeln('User: "Actually, I don\'t want the stew anymore"');
+        buffer.writeln('→ SAY: "No problem, what would you like instead?"');
+        buffer.writeln('');
+        buffer.writeln('User: "I\'ll have the salad instead"');
+        buffer.writeln(
+          '→ SAY: "Good choice, the salad should be safe for you"',
+        );
+        buffer.writeln('');
+        buffer.writeln('User: "I\'ll keep the stew" (after safety warning)');
+        buffer.writeln('→ SAY: "Alright, I\'ll put that through for you"');
+        buffer.writeln('');
+        buffer.writeln('');
+        buffer.writeln('INGREDIENT QUESTION RESPONSES:');
+        buffer.writeln(
+          '- "The stew has herbs and spices that might contain traces of various allergens"',
+        );
+        buffer.writeln(
+          '- "There could be some allergen traces from the seasonings and preparation"',
+        );
+        buffer.writeln(
+          '- "The kitchen uses various ingredients - there might be traces of common allergens"',
+        );
+        buffer.writeln('');
+        buffer.writeln(
+          '- CRITICAL: NEVER ask about allergies - only respond when customer mentions them',
+        );
+        buffer.writeln(
+          '- NEVER say "who had the allergy again?" or assume allergies exist',
+        );
+        buffer.writeln(
+          '- THINK about what customer actually said - don\'t make assumptions',
+        );
+        buffer.writeln(
+          '- IF customer mentions allergies, follow TWO-STEP pattern:',
+        );
+        buffer.writeln(
+          '- STEP 1: Initially respond with mild business constraints: "Okay, I\'ll mention it, but we\'re quite busy today. Any drinks?" or "Right, I\'ll let them know, though the kitchen\'s pretty hectic"',
+        );
+        buffer.writeln(
+          '- STEP 1 must be SHORT and NOT include chef information or challenges',
+        );
+        buffer.writeln(
+          '- STEP 2: ONLY on LATER turns, present challenges claiming to speak with chef:',
+        );
+        // Generate dynamic cross-contamination example based on user's allergies
+        final allergen = playerProfile?.allergies.isNotEmpty == true
+            ? playerProfile!.allergies.first.toLowerCase()
+            : 'allergens';
+
+        if (allergen == 'egg') {
+          buffer.writeln(
+            '  "I\'ve spoken to the chef, and she said that we use eggs in our batter for other dishes, and the same equipment gets used throughout the kitchen. So there could be some egg traces from other preparations."',
+          );
+        } else if (allergen.contains('nut')) {
+          buffer.writeln(
+            '  "So I spoke with the chef, and he said that he\'s too busy now to clean down all the equipment to make your order, and other people do get nuts on French toast, so they are in our kitchen. It\'s a really busy time now with brunch on a Sunday. But you should be fine with just maybe some traces"',
+          );
+        } else if (allergen == 'fish' || allergen == 'seafood') {
+          buffer.writeln(
+            '  "I\'ve spoken to the chef, and she said that we fry everything in the one fryer, including our battered fish. So the oil could have some fish traces in it, it\'s hard to say"',
+          );
+        } else {
+          buffer.writeln(
+            '  "I\'ve spoken to the chef, and she said that we prepare many different dishes using the same equipment, so there could be some $allergen traces from other orders."',
+          );
+        }
+        buffer.writeln(
+          '- NEVER combine casual acceptance with challenges in one response',
+        );
+        buffer.writeln(
+          '- Challenges should be presented as denials/problems, not solutions',
+        );
+        buffer.writeln(
+          '- Give inappropriate advice that forces customer decisions',
+        );
+        buffer.writeln(
+          '- Present realistic kitchen constraints and business pressures',
+        );
+        buffer.writeln('- Use casual language but create safety challenges');
+        buffer.writeln(
+          '- Be accommodating only when customer explicitly pushes back',
+        );
+        buffer.writeln(
+          '- NEVER be overly helpful or accommodating - make customers work for safety assurance',
+        );
+        buffer.writeln(
+          '- Emphasize business priorities: "It\'s a really busy time", "The chef\'s too busy", "We don\'t have time to..."',
+        );
+        buffer.writeln(
+          '- Before conversation ends, confirm final order: "So to confirm, you\'re having [dishes and drinks]"',
+        );
+        buffer.writeln(
+          '- Track multiple orders if customer orders several items',
+        );
+        buffer.writeln(
+          '- Note if customer cancels unsafe food (good safety decision)',
         );
         if (behaviorRules.includeHiddenAllergens) {
           buffer.writeln(
@@ -1771,7 +2261,6 @@ Respond with JSON only:
     return buffer.toString();
   }
 
-  /// ✅ NEW: Generate enhanced fallback prompt with scenario rules
   String _generateEnhancedFallbackPrompt(
     String menuForAI,
     ScenarioConfig? scenarioConfig,
@@ -1797,26 +2286,39 @@ Respond with JSON only:
 
     buffer.writeln('\n$menuForAI');
 
-    buffer.writeln('\n🚨🚨🚨 ABSOLUTE MANDATORY RULES 🚨🚨🚨');
+    buffer.writeln('\n ABSOLUTE MANDATORY RULES ');
+    buffer.writeln(' SIMPLE GUIDELINES:');
+    buffer.writeln('- Ingredient question? → Give factual info');
+    buffer.writeln('- Allergy disclosure? → Follow level protocols');
+    buffer.writeln('- Food order? → Process order');
     buffer.writeln(
-      '1. YOU CAN ONLY MENTION FOOD ITEMS THAT ARE LISTED ABOVE IN THE MENU',
+      '- Cross-contact question? → Follow level behavior (supportive vs challenging)',
     );
-    buffer.writeln('2. USE THE EXACT DISH NAMES - COPY THEM WORD FOR WORD');
+    buffer.writeln('- Conversation ending? → Confirm final order');
+    buffer.writeln('');
     buffer.writeln(
-      '3. NEVER MENTION: "garlic bread", "bruschetta", "calamari", generic food names',
+      '1. NEVER ASK ABOUT ALLERGIES - only respond if customer mentions them first',
     );
     buffer.writeln(
-      '4. ONLY suggest items marked "✅ SAFE" for customers with allergies',
+      '2. YOU CAN ONLY MENTION FOOD ITEMS THAT ARE LISTED ABOVE IN THE MENU',
+    );
+    buffer.writeln('3. USE THE EXACT DISH NAMES - COPY THEM WORD FOR WORD');
+    buffer.writeln(
+      '4. NEVER MENTION: "garlic bread", "bruschetta", "calamari", generic food names',
+    );
+    buffer.writeln(
+      '5. ONLY suggest items marked "SAFE" for customers with allergies',
+    );
+    buffer.writeln(
+      '6. THINK about what customer actually said - don\'t assume or make up context',
     );
 
     return buffer.toString();
   }
 
-  /// ✅ NEW: Generate fallback responses using actual menu data
   String _generateMenuBasedFallback(String userInput, String menuForAI) {
     final lowerInput = userInput.toLowerCase();
 
-    // ✅ PRIORITY: Handle positive responses to suggestions (yes, sure, ok, etc.)
     if (lowerInput.trim() == 'yes' ||
         lowerInput.trim() == 'sure' ||
         lowerInput.trim() == 'ok' ||
@@ -1829,7 +2331,7 @@ Respond with JSON only:
 
       for (int i = 0; i < menuLines.length; i++) {
         final line = menuLines[i];
-        if (line.contains('✅ SAFE')) {
+        if (line.contains('SAFE')) {
           // Look backward for the item name
           for (int j = i - 1; j >= math.max(0, i - 5); j--) {
             final itemLine = menuLines[j];
@@ -1855,7 +2357,6 @@ Respond with JSON only:
       }
     }
 
-    // ✅ NEW: Handle food type queries (e.g., "what do you have in chicken")
     if (lowerInput.contains('what') &&
         (lowerInput.contains('have') || lowerInput.contains('got')) &&
         (lowerInput.contains('in ') || lowerInput.contains('with '))) {
@@ -1950,13 +2451,12 @@ Respond with JSON only:
       }
       return "What are you in the mood for today?";
     } else if (lowerInput.contains('safe') || lowerInput.contains('allerg')) {
-      // ✅ Handle allergy-specific safe options from actual menu
       final menuLines = menuForAI.split('\n');
       final safeItems = <String>[];
 
       for (int i = 0; i < menuLines.length; i++) {
         final line = menuLines[i];
-        if (line.contains('✅ SAFE')) {
+        if (line.contains('SAFE')) {
           // Look backward for the item name (should be a few lines above)
           for (int j = i - 1; j >= math.max(0, i - 5); j--) {
             final itemLine = menuLines[j];
@@ -1982,7 +2482,6 @@ Respond with JSON only:
     }
   }
 
-  /// ✅ NEW: Find menu items by food type
   String _findItemsByFoodType(String foodType, String menuForAI) {
     final menuLines = menuForAI.split('\n');
     final matchingItems = <String>[];
@@ -1993,7 +2492,6 @@ Respond with JSON only:
         final itemNameLower = itemName.toLowerCase();
         final foodTypeLower = foodType.toLowerCase();
 
-        // Check if the item name or description contains the food type
         bool matches = false;
 
         // Direct name matches
@@ -2117,7 +2615,6 @@ Respond with JSON only:
     String? selectedDish = context.selectedDish;
     bool confirmedDish = context.confirmedDish;
 
-    // ✅ FIXED: Handle allergies mentioned in ANY intent (not just allergy_disclosure)
     if (analysis['mentioned_allergies'] is List &&
         (analysis['mentioned_allergies'] as List).isNotEmpty) {
       final newAllergies = (analysis['mentioned_allergies'] as List<dynamic>)
@@ -2137,16 +2634,12 @@ Respond with JSON only:
       }
     }
 
-    // ✅ FIXED: Handle food ordering from ANY intent that contains ordered_food
-    // BUT don't overwrite existing dish unless it's clearly a new order
     if (analysis['ordered_food'] != null &&
         analysis['ordered_food'].toString().isNotEmpty &&
         analysis['ordered_food'].toString() != 'null') {
       final rawDish = analysis['ordered_food'].toString();
       final normalizedDish = _normalizeDishName(rawDish);
 
-      // Only update if it's a different dish OR if no dish was previously selected
-      // Avoid overwriting when user is just confirming (e.g., "yes, bread with that")
       final lowerInput = userInput.toLowerCase();
       final isConfirmation =
           lowerInput.startsWith('yes') ||
@@ -2192,15 +2685,86 @@ Respond with JSON only:
       }
     }
 
+    // NEW: Track safety warnings and order changes
+    List<String> cancelledAfterWarning = [
+      ...context.cancelledOrdersAfterWarning,
+    ];
+    List<String> keptUnsafeAfterWarning = [
+      ...context.keptUnsafeOrdersAfterWarning,
+    ];
+    List<String> reorderedAfterCancellation = [
+      ...context.reorderedItemsAfterCancellation,
+    ];
+    bool safetyWarningGiven = context.safetyWarningGiven;
+
+    // Detect safety warnings in waiter response
+    final lowerResponse = waiterResponse.toLowerCase();
+    bool containsSafetyWarning =
+        lowerResponse.contains('traces') ||
+        lowerResponse.contains('cross') ||
+        lowerResponse.contains('contamination') ||
+        lowerResponse.contains('shared equipment') ||
+        lowerResponse.contains('same fryer') ||
+        lowerResponse.contains('too busy') ||
+        lowerResponse.contains('can\'t guarantee') ||
+        lowerResponse.contains('might contain');
+
+    if (containsSafetyWarning && !safetyWarningGiven) {
+      safetyWarningGiven = true;
+      debugPrint('[CONTEXT UPDATE] Safety warning detected in waiter response');
+    }
+
+    // Detect order cancellations after safety warnings
+    final lowerInput = userInput.toLowerCase();
+    bool isCancellation =
+        lowerInput.contains('don\'t want') ||
+        lowerInput.contains('cancel') ||
+        lowerInput.contains('change my order') ||
+        lowerInput.contains('something else') ||
+        lowerInput.contains('different') ||
+        lowerInput.contains('instead');
+
+    if (isCancellation &&
+        context.safetyWarningGiven &&
+        context.selectedDish != null) {
+      cancelledAfterWarning.add(context.selectedDish!);
+      debugPrint(
+        '[CONTEXT UPDATE] Order cancelled after safety warning: ${context.selectedDish}',
+      );
+      selectedDish = null; // Clear current selection
+      confirmedDish = false;
+    }
+
+    // Detect when user keeps order despite safety warnings
+    bool isKeepingOrder =
+        (lowerInput.contains('keep') && lowerInput.contains('order')) ||
+        (lowerInput.contains('i\'ll have') && context.safetyWarningGiven) ||
+        (lowerInput.contains('still want') || lowerInput.contains('anyway'));
+
+    if (isKeepingOrder &&
+        context.safetyWarningGiven &&
+        context.selectedDish != null) {
+      keptUnsafeAfterWarning.add(context.selectedDish!);
+      debugPrint(
+        '[CONTEXT UPDATE] Kept unsafe order after safety warning: ${context.selectedDish}',
+      );
+    }
+
+    // Detect reorders after cancellation
+    if (selectedDish != null &&
+        cancelledAfterWarning.isNotEmpty &&
+        !context.reorderedItemsAfterCancellation.contains(selectedDish!)) {
+      reorderedAfterCancellation.add(selectedDish!);
+      debugPrint(
+        '[CONTEXT UPDATE] Reordered after cancellation: $selectedDish',
+      );
+    }
+
     // Handle order confirmation (waiter confirms the order)
     if (selectedDish != null && !confirmedDish) {
       // Simple check: if waiter response is positive and not a question/warning
-      final lowerResponse = waiterResponse.toLowerCase();
       bool isQuestion = waiterResponse.contains('?');
-      bool isWarning =
-          lowerResponse.contains('contains') ||
-          lowerResponse.contains('allergic') ||
-          lowerResponse.contains('not safe');
+      bool isWarning = containsSafetyWarning;
 
       if (!isQuestion && !isWarning && lowerResponse.length > 10) {
         confirmedDish = true;
@@ -2228,6 +2792,10 @@ Respond with JSON only:
       confirmedDish: confirmedDish,
       turnCount: context.turnCount + 1,
       topicsCovered: newTopics,
+      cancelledOrdersAfterWarning: cancelledAfterWarning,
+      keptUnsafeOrdersAfterWarning: keptUnsafeAfterWarning,
+      reorderedItemsAfterCancellation: reorderedAfterCancellation,
+      safetyWarningGiven: safetyWarningGiven,
     );
 
     // Update internal context

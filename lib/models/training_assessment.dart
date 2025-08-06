@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'scenario_models.dart';
 
 /// Represents a complete training session
 class TrainingSession {
@@ -186,6 +187,12 @@ class AssessmentResult {
   final List<String> improvements;
   final String detailedFeedback;
   final DateTime assessedAt;
+  
+  // New fields for enhanced scoring system
+  final DifficultyLevel level; // Training difficulty level
+  final int maxPossibleScore; // Maximum possible score for this level
+  final int passingScore; // Minimum score to pass this level
+  final bool criticalFailure; // If true, user failed critically (unsafe + no disclosure)
 
   const AssessmentResult({
     required this.allergyDisclosureScore,
@@ -212,6 +219,10 @@ class AssessmentResult {
     required this.improvements,
     required this.detailedFeedback,
     required this.assessedAt,
+    this.level = DifficultyLevel.beginner,
+    this.maxPossibleScore = 100,
+    this.passingScore = 70,
+    this.criticalFailure = false,
   });
 
   factory AssessmentResult.fromJson(Map<String, dynamic> json) {
@@ -240,6 +251,13 @@ class AssessmentResult {
       improvements: List<String>.from(json['improvements'] ?? []),
       detailedFeedback: json['detailedFeedback'],
       assessedAt: (json['assessedAt'] as Timestamp).toDate(),
+      level: DifficultyLevel.values.firstWhere(
+        (level) => level.name == json['level'],
+        orElse: () => DifficultyLevel.beginner,
+      ),
+      maxPossibleScore: json['maxPossibleScore'] ?? 100,
+      passingScore: json['passingScore'] ?? 70,
+      criticalFailure: json['criticalFailure'] ?? false,
     );
   }
 
@@ -269,6 +287,10 @@ class AssessmentResult {
       'improvements': improvements,
       'detailedFeedback': detailedFeedback,
       'assessedAt': Timestamp.fromDate(assessedAt),
+      'level': level.name,
+      'maxPossibleScore': maxPossibleScore,
+      'passingScore': passingScore,
+      'criticalFailure': criticalFailure,
     };
   }
 
