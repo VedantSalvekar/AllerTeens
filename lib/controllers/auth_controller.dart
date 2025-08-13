@@ -437,9 +437,9 @@ class AuthController extends StateNotifier<AuthState> {
         error: null,
       );
 
-      print('✅ [AUTH_CONTROLLER] Email verification bypassed successfully');
+      print('[AUTH_CONTROLLER] Email verification bypassed successfully');
     } catch (e) {
-      print('❌ [AUTH_CONTROLLER] Error bypassing email verification: $e');
+      print('[AUTH_CONTROLLER] Error bypassing email verification: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to bypass email verification: $e',

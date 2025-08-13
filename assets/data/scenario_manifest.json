@@ -34,11 +34,13 @@
       "file": "scenarios/party_intermediate.json",
       "type": "party",
       "level": "intermediate", 
-      "name": "Birthday Party",
-      "description": "Handle social pressure and peer interactions at a friend's party",
+      "name": "Birthday Party Challenge",
+      "description": "Navigate peer pressure when friends offer unsafe food at a party",
       "menuFile": null,
-      "enabled": false,
-      "requiredScore": 120
+      "enabled": true,
+      "requiredScore": 120,
+      "conversationType": "multi_character",
+      "dialogueFile": "birthday_party_dialogue.json"
     },
     "school_intermediate": {
       "file": "scenarios/school_intermediate.json",

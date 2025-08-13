@@ -28,9 +28,12 @@ class _MobileScannerScreenState extends ConsumerState<MobileScannerScreen> {
       torchEnabled: false,
     );
 
-    // Start scanning after widget tree is built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(productScanControllerProvider.notifier).startBarcodeScanning();
+    // Initialize scanning state immediately to prevent timing issues
+    // The original issue was that PostFrameCallback runs too late, after MobileScanner starts detecting
+    Future.microtask(() {
+      if (mounted) {
+        ref.read(productScanControllerProvider.notifier).startBarcodeScanning();
+      }
     });
   }
 
@@ -39,6 +42,14 @@ class _MobileScannerScreenState extends ConsumerState<MobileScannerScreen> {
     ref.read(productScanControllerProvider.notifier).cancelBarcodeScanning();
     scannerController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reset hasScanned flag when returning to this screen
+    // This ensures the scanner works again if user comes back from results screen
+    hasScanned = false;
   }
 
   @override
@@ -91,11 +102,24 @@ class _MobileScannerScreenState extends ConsumerState<MobileScannerScreen> {
               MobileScanner(
                 controller: scannerController,
                 onDetect: (barcodeCapture) {
-                  if (!hasScanned && scanState.isScanning) {
-                    hasScanned = true;
-                    ref
-                        .read(productScanControllerProvider.notifier)
-                        .onBarcodeDetected(barcodeCapture);
+                  // Improved barcode detection logic with better timing handling
+                  print(
+                    '[SCANNER] Barcode detected - hasScanned: $hasScanned, isScanning: ${scanState.isScanning}',
+                  );
+
+                  if (!hasScanned) {
+                    // Check if we have valid barcodes
+                    final barcodes = barcodeCapture.barcodes;
+                    if (barcodes.isNotEmpty &&
+                        barcodes.first.rawValue != null) {
+                      hasScanned = true;
+                      print(
+                        '[SCANNER] Processing barcode: ${barcodes.first.rawValue}',
+                      );
+                      ref
+                          .read(productScanControllerProvider.notifier)
+                          .onBarcodeDetected(barcodeCapture);
+                    }
                   }
                 },
               ),

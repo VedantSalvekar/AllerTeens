@@ -261,31 +261,39 @@ class ScenarioDataProvider {
       //   rewards: ['Takeaway safety badge'],
       // ),
 
-      // // INTERMEDIATE LEVEL SCENARIOS
-      // TrainingScenario(
-      //   id: 'party_intermediate',
-      //   title: 'Birthday Party',
-      //   description:
-      //       'Handle social pressure and peer interactions at a friend\'s party',
-      //   iconPath: 'assets/icons/party.png',
-      //   type: ScenarioType.party,
-      //   difficulty: DifficultyLevel.intermediate,
-      //   learningObjectives: [
-      //     'Communicate with party hosts',
-      //     'Handle peer pressure appropriately',
-      //     'Suggest safe alternatives',
-      //   ],
-      //   scenarioData: {
-      //     'setting': 'Friend\'s birthday party',
-      //     'npcRole': 'Party host parent',
-      //     'complexity': 'medium',
-      //     'prompts': 'medium',
-      //   },
-      //   accentColor: const Color(0xFF9C27B0),
-      //   estimatedDuration: 5,
-      //   requiredScore: 150,
-      //   rewards: ['Social confidence badge', 'Party safety points'],
-      // ),
+      // INTERMEDIATE LEVEL SCENARIOS
+      TrainingScenario(
+        id: 'party_intermediate',
+        title: 'Birthday Party Challenge',
+        description:
+            'Navigate peer pressure when friends offer unsafe food at a party',
+        iconPath: 'assets/icons/party.png',
+        type: ScenarioType.party,
+        difficulty: DifficultyLevel.intermediate,
+        learningObjectives: [
+          'Stand firm when pressured to eat unsafe food',
+          'Explain allergy severity clearly to friends',
+          'Educate others about cross-contamination',
+          'Maintain friendships while prioritizing safety',
+        ],
+        scenarioData: {
+          'setting': 'Friend\'s birthday party',
+          'npcRole': 'Multiple friends',
+          'complexity': 'medium',
+          'prompts': 'medium',
+          'conversationType': 'multi_character',
+          'dialogueFile': 'birthday_party_dialogue.json',
+        },
+        accentColor: const Color(0xFF9C27B0),
+        estimatedDuration: 8,
+        requiredScore: 120,
+        isUnlocked: true,
+        rewards: [
+          'Social confidence badge',
+          'Party safety points',
+          'Peer educator badge',
+        ],
+      ),
 
       // OTHER SCENARIOS
       TrainingScenario(

@@ -63,9 +63,15 @@ class ProductScanController extends StateNotifier<ProductScanState> {
 
   /// Start barcode scanning using camera (simplified for mobile_scanner)
   void startBarcodeScanning() {
-    if (state.isScanning || state.isLoading) return;
+    // Remove the check for isScanning to allow reinitialization
+    // Only prevent starting if actively loading a previous scan
+    if (state.isLoading) {
+      print('[SCAN] Scanner not started - currently loading previous scan');
+      return;
+    }
+    
     state = state.copyWith(isScanning: true, error: null);
-    print('[SCAN] Camera scanner opened');
+    print('[SCAN] Camera scanner opened - isScanning: true');
   }
 
   /// Handle barcode detected from mobile scanner

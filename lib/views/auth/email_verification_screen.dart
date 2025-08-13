@@ -250,54 +250,53 @@ class _EmailVerificationScreenState
                   const SizedBox(height: 20),
 
                   // Development mode notice
-                  if (kDebugMode && _showDeveloperOptions) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.warning.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.warning.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.developer_mode,
-                                color: AppColors.warning,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Development Mode',
-                                  style: AppTextStyles.bodyText1.copyWith(
-                                    color: AppColors.warning,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'In the simulator, Firebase will send real emails to real email addresses. '
-                            'For testing, you can use the bypass option below.',
-                            style: AppTextStyles.bodyText2.copyWith(
-                              color: AppColors.darkGrey,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                  // if (kDebugMode && _showDeveloperOptions) ...[
+                  //   Container(
+                  //     width: double.infinity,
+                  //     padding: const EdgeInsets.all(16),
+                  //     decoration: BoxDecoration(
+                  //       color: AppColors.warning.withOpacity(0.1),
+                  //       borderRadius: BorderRadius.circular(12),
+                  //       border: Border.all(
+                  //         color: AppColors.warning.withOpacity(0.3),
+                  //         width: 1,
+                  //       ),
+                  //     ),
+                  //     child: Column(
+                  //       crossAxisAlignment: CrossAxisAlignment.start,
+                  //       children: [
+                  //         Row(
+                  //           children: [
+                  //             Icon(
+                  //               Icons.developer_mode,
+                  //               color: AppColors.warning,
+                  //               size: 20,
+                  //             ),
+                  //             const SizedBox(width: 8),
+                  //             Expanded(
+                  //               child: Text(
+                  //                 'Development Mode',
+                  //                 style: AppTextStyles.bodyText1.copyWith(
+                  //                   color: AppColors.warning,
+                  //                   fontWeight: FontWeight.w600,
+                  //                 ),
+                  //               ),
+                  //             ),
+                  //           ],
+                  //         ),
+                  //         const SizedBox(height: 8),
+                  //         Text(
+                  //           'For testing, you can use the bypass option below.',
+                  //           style: AppTextStyles.bodyText2.copyWith(
+                  //             color: AppColors.darkGrey,
+                  //             height: 1.4,
+                  //           ),
+                  //         ),
+                  //       ],
+                  //     ),
+                  //   ),
+                  //   const SizedBox(height: 20),
+                  // ],
 
                   // Instructions
                   Container(
@@ -365,17 +364,27 @@ class _EmailVerificationScreenState
                     ),
                   ),
 
-                  // Developer bypass button
+                  // Developer bypass link
                   if (kDebugMode && _showDeveloperOptions) ...[
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
-                      child: CustomButton(
-                        text: 'Bypass Email Verification (Dev Only)',
-                        onPressed: _bypassEmailVerification,
-                        isOutlined: true,
-                        backgroundColor: AppColors.warning,
-                        icon: const Icon(Icons.developer_mode, size: 20),
+                      child: Center(
+                        child: TextButton(
+                          onPressed: _bypassEmailVerification,
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.warning,
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: Text(
+                            'Bypass Email Verification',
+                            style: AppTextStyles.bodyText1.copyWith(
+                              color: AppColors.warning,
+                              // decoration: TextDecoration.underline,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -430,7 +439,7 @@ class _EmailVerificationScreenState
                     padding: const EdgeInsets.only(top: 24),
                     child: Text(
                       kDebugMode
-                          ? 'Having trouble? Use the developer mode button above, contact support, or try signing in with Google instead.'
+                          ? 'Having trouble? Use the developer mode button above, or try signing in with Google instead.'
                           : 'Having trouble? Contact support or try signing in with Google instead.',
                       style: AppTextStyles.bodyText2.copyWith(
                         color: AppColors.grey,

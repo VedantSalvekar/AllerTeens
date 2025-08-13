@@ -39,6 +39,14 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
   final FocusNode _emergencyContactRelationshipFocus = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    if (_emergencyContactPhoneController.text.trim().isEmpty) {
+      _emergencyContactPhoneController.text = '+353 ';
+    }
+  }
+
+  @override
   void dispose() {
     _emergencyContactNameController.dispose();
     _emergencyContactPhoneController.dispose();
@@ -53,7 +61,7 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
-    final userFirstName = authState.user?.name?.split(' ').first ?? 'User';
+    final userFirstName = authState.user?.name.split(' ').first ?? 'User';
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -535,6 +543,19 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
       }
 
       // Prepare medical information
+      // Normalize phone to ensure +353 prefix
+      String phoneInput = _emergencyContactPhoneController.text.trim();
+      if (!phoneInput.startsWith('+')) {
+        final digitsOnly = phoneInput.replaceAll(RegExp(r'[^\d]'), '');
+        if (digitsOnly.startsWith('353')) {
+          phoneInput = '+$digitsOnly';
+        } else if (digitsOnly.startsWith('0')) {
+          phoneInput = '+353${digitsOnly.substring(1)}';
+        } else {
+          phoneInput = '+353$digitsOnly';
+        }
+      }
+
       final medicalInfo = {
         'medication': {
           'name': _selectedMedication ?? '',
@@ -543,7 +564,7 @@ class _MedicalInfoScreenState extends ConsumerState<MedicalInfoScreen> {
         },
         'emergencyContact': {
           'name': _emergencyContactNameController.text.trim(),
-          'phone': _emergencyContactPhoneController.text.trim(),
+          'phone': phoneInput,
           'relationship': _emergencyContactRelationshipController.text.trim(),
         },
       };

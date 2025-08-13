@@ -42,7 +42,7 @@ class PenReminderDialog extends ConsumerWidget {
 
             // Title
             const Text(
-              '💉 Pen Check!',
+              'Pen Check!',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
@@ -70,14 +70,22 @@ class PenReminderDialog extends ConsumerWidget {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () async {
+                        // Always close dialog first for better UX
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+
+                        // Then save response and show confirmation
                         final success = await reminderController.saveResponse(
                           false,
                         );
-                        if (success && context.mounted) {
-                          Navigator.of(context).pop();
+
+                        if (context.mounted) {
                           _showConfirmationSnackBar(
                             context,
-                            'No worries! Remember to carry it tomorrow',
+                            success
+                                ? 'No worries! Remember to carry it tomorrow'
+                                : 'Response recorded. Remember your pen tomorrow!',
                             isSuccess: false,
                           );
                         }
@@ -108,14 +116,22 @@ class PenReminderDialog extends ConsumerWidget {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () async {
+                        // Always close dialog first for better UX
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+
+                        // Then save response and show confirmation
                         final success = await reminderController.saveResponse(
                           true,
                         );
-                        if (success && context.mounted) {
-                          Navigator.of(context).pop();
+
+                        if (context.mounted) {
                           _showConfirmationSnackBar(
                             context,
-                            'Great! You\'re all set for today',
+                            success
+                                ? 'Great! You\'re all set for today'
+                                : 'Response recorded. You\'re all set!',
                             isSuccess: true,
                           );
                         }

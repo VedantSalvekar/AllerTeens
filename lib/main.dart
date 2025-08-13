@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'controllers/auth_controller.dart';
-import 'models/user_model.dart';
-import 'views/auth/login_screen.dart';
+import 'controllers/pen_reminder_controller.dart';
 import 'views/auth/onboarding_screen.dart';
 import 'views/auth/email_verification_screen.dart';
 import 'views/auth/allergy_selection_screen.dart';
 import 'views/home/home_view.dart';
-import 'views/splash/splash_screen.dart';
-import 'views/integrated_conversation/integrated_conversation_screen.dart';
+import 'views/pen_reminder/pen_reminder_dialog.dart';
+import 'services/pen_reminder_notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants.dart';
 
@@ -36,7 +35,23 @@ class _MyAppState extends ConsumerState<MyApp> {
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   @override
+  void initState() {
+    super.initState();
+
+    // Set up notification tap callback to show pen reminder dialog
+    PenReminderNotificationService.setNotificationTapCallback((context) {
+      print('🔔 Notification callback triggered');
+      print('🔔 Context: $context');
+      print('🔔 Showing pen reminder dialog');
+      showPenReminderDialog(context);
+    });
+    print('🔔 Notification callback set up in main.dart');
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // DEMO: Don't initialize here - wait until user reaches home screen
+
     // ✅ LISTEN: React to auth state changes and navigate accordingly
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
       print(
@@ -106,7 +121,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       title: AppConstants.appName,
       theme: AppTheme.lightTheme,
       navigatorKey: navigatorKey,
-      home: const AuthWrapper(),
+      home: AuthWrapper(navigatorKey: navigatorKey),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -114,7 +129,9 @@ class _MyAppState extends ConsumerState<MyApp> {
 
 /// Wrapper widget that shows the initial screen based on auth state
 class AuthWrapper extends ConsumerWidget {
-  const AuthWrapper({super.key});
+  final GlobalKey<NavigatorState> navigatorKey;
+
+  const AuthWrapper({super.key, required this.navigatorKey});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -154,6 +171,47 @@ class AuthWrapper extends ConsumerWidget {
     }
 
     print('🔄 [AUTH_WRAPPER] Showing home view');
+
+    // Check for pending notification tap when showing home view
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PenReminderNotificationService.checkPendingNotificationTap(context);
+    });
+
+    return DemoHomeView(navigatorKey: navigatorKey);
+  }
+}
+
+/// Demo wrapper for HomeView that initializes pen reminder
+class DemoHomeView extends ConsumerStatefulWidget {
+  final GlobalKey<NavigatorState> navigatorKey;
+
+  const DemoHomeView({super.key, required this.navigatorKey});
+
+  @override
+  ConsumerState<DemoHomeView> createState() => _DemoHomeViewState();
+}
+
+class _DemoHomeViewState extends ConsumerState<DemoHomeView> {
+  static bool _demoInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // DEMO: Initialize pen reminder when user reaches home screen (fully signed up)
+    if (!_demoInitialized) {
+      _demoInitialized = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        print('🔔 [DEMO] User reached home screen - initializing pen reminder');
+        ref
+            .read(penReminderControllerProvider.notifier)
+            .initialize(navigatorKey: widget.navigatorKey);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return const HomeView();
   }
 }

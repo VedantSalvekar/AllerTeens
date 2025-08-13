@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/pen_reminder_response.dart';
@@ -126,24 +127,36 @@ class PenReminderController extends StateNotifier<PenReminderState> {
         .collection('pen_reminder_responses');
   }
 
+  static bool _demoInitialized = false;
+
   /// Initialize pen reminders (call on app start when user is signed in)
-  Future<void> initialize() async {
+  Future<void> initialize({GlobalKey<NavigatorState>? navigatorKey}) async {
     if (_userId == null) return;
 
-    // Initialize notification service
-    await PenReminderNotificationService.instance.initialize();
+    print('🔔 [DEMO] Initialize called for demo');
+    print('🔔 [DEMO] Navigator key provided: ${navigatorKey != null}');
 
-    // Load existing responses
-    await loadResponses();
+    // Initialize notification service with navigator key (only on first call)
+    if (!_demoInitialized) {
+      _demoInitialized = true;
+      await PenReminderNotificationService.instance.initialize(
+        navigatorKey: navigatorKey,
+      );
 
-    // Check today's response
-    await _checkTodayResponse();
+      // Load existing responses
+      await loadResponses();
 
-    // Schedule daily reminder if not already done
-    // TODO: Uncomment this for production use
-    // await PenReminderNotificationService.instance.scheduleDailyReminder();
+      // Check today's response
+      await _checkTodayResponse();
+    }
 
-    // For testing: Show notification immediately
+    // DEMO VERSION: Always show notification when app opens
+    print('🔔 [DEMO] Showing notification for demo - app opened');
+
+    // Show notification immediately for demo
+    await Future.delayed(
+      const Duration(seconds: 2),
+    ); // Small delay to let app fully load
     await showTestNotification();
   }
 
@@ -312,10 +325,27 @@ class PenReminderController extends StateNotifier<PenReminderState> {
     state = state.copyWith(error: null);
   }
 
-  /// Enable/disable daily reminders
-  Future<void> setDailyRemindersEnabled(bool enabled) async {
+  /// Enable/disable daily reminders with random time
+  Future<void> setDailyRemindersEnabledRandom(bool enabled) async {
     if (enabled) {
-      await PenReminderNotificationService.instance.scheduleDailyReminder();
+      await PenReminderNotificationService.instance
+          .scheduleDailyReminderRandom();
+    } else {
+      await PenReminderNotificationService.instance.cancelDailyReminder();
+    }
+  }
+
+  /// Enable/disable daily reminders with fixed time (for testing)
+  Future<void> setDailyRemindersEnabledFixed(
+    bool enabled, {
+    int hour = 11,
+    int minute = 41,
+  }) async {
+    if (enabled) {
+      await PenReminderNotificationService.instance.scheduleDailyReminderFixed(
+        hour: hour,
+        minute: minute,
+      );
     } else {
       await PenReminderNotificationService.instance.cancelDailyReminder();
     }
