@@ -39,12 +39,7 @@ android {
             storeFile = file("debug.keystore")
             storePassword = "android"
         }
-        create("release") {
-            keyAlias = System.getenv("ANDROID_KEYSTORE_ALIAS")
-            keyPassword = System.getenv("ANDROID_KEYSTORE_PRIVATE_KEY_PASSWORD")
-            storeFile = file("keystore.jks")
-            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-        }
+        // Release signing configuration removed for demo builds
     }
 
     buildTypes {
@@ -54,7 +49,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            // Using debug signing for demo builds
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }

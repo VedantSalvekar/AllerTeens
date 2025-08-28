@@ -60,9 +60,7 @@ class ProfileController extends StateNotifier<ProfileState> {
 
   /// Update user profile with new data
   Future<bool> updateProfile(UserModel updatedUser) async {
-    print(
-      '🔵 [PROFILE] Starting profile update for user: ${updatedUser.email}',
-    );
+    print('[PROFILE] Starting profile update for user: ${updatedUser.email}');
     state = state.copyWith(isSaving: true, error: null);
 
     try {

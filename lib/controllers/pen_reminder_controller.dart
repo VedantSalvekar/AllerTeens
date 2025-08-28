@@ -129,12 +129,19 @@ class PenReminderController extends StateNotifier<PenReminderState> {
 
   static bool _demoInitialized = false;
 
+  /// Reset demo initialization flag (for development/testing)
+  static void resetDemoFlag() {
+    _demoInitialized = false;
+  }
+
   /// Initialize pen reminders (call on app start when user is signed in)
   Future<void> initialize({GlobalKey<NavigatorState>? navigatorKey}) async {
     if (_userId == null) return;
 
-    print('🔔 [DEMO] Initialize called for demo');
-    print('🔔 [DEMO] Navigator key provided: ${navigatorKey != null}');
+    // Only process if we have a navigator key (ignore duplicate calls without key)
+    if (navigatorKey == null) {
+      return;
+    }
 
     // Initialize notification service with navigator key (only on first call)
     if (!_demoInitialized) {
@@ -148,16 +155,15 @@ class PenReminderController extends StateNotifier<PenReminderState> {
 
       // Check today's response
       await _checkTodayResponse();
+
+      // Show notification immediately for demo
+      await Future.delayed(
+        const Duration(seconds: 2),
+      ); // Small delay to let app fully load
+      await showTestNotification();
+    } else {
+      print('[DEMO] Already initialized, skipping');
     }
-
-    // DEMO VERSION: Always show notification when app opens
-    print('🔔 [DEMO] Showing notification for demo - app opened');
-
-    // Show notification immediately for demo
-    await Future.delayed(
-      const Duration(seconds: 2),
-    ); // Small delay to let app fully load
-    await showTestNotification();
   }
 
   /// Show test notification (for development/testing)

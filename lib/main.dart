@@ -40,28 +40,26 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     // Set up notification tap callback to show pen reminder dialog
     PenReminderNotificationService.setNotificationTapCallback((context) {
-      print('🔔 Notification callback triggered');
-      print('🔔 Context: $context');
-      print('🔔 Showing pen reminder dialog');
+      print('Notification callback triggered');
+      print('Context: $context');
+      print('Showing pen reminder dialog');
       showPenReminderDialog(context);
     });
-    print('🔔 Notification callback set up in main.dart');
+    print('Notification callback set up in main.dart');
   }
 
   @override
   Widget build(BuildContext context) {
     // DEMO: Don't initialize here - wait until user reaches home screen
 
-    // ✅ LISTEN: React to auth state changes and navigate accordingly
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
       print(
-        '🔄 [MY_APP] Auth state changed: ${previous?.isAuthenticated ?? 'null'} -> ${next.isAuthenticated}',
+        '[MY_APP] Auth state changed: ${previous?.isAuthenticated ?? 'null'} -> ${next.isAuthenticated}',
       );
       print(
-        '🔄 [MY_APP] Auth state details: prev=${previous?.user?.email ?? 'null'}, next=${next.user?.email ?? 'null'}, initialized=${next.isInitialized}',
+        '[MY_APP] Auth state details: prev=${previous?.user?.email ?? 'null'}, next=${next.user?.email ?? 'null'}, initialized=${next.isInitialized}',
       );
 
-      // ✅ CHECK: Force navigation on any meaningful auth change
       final shouldNavigate =
           next.isInitialized &&
           (previous?.isAuthenticated != next.isAuthenticated ||
@@ -73,27 +71,27 @@ class _MyAppState extends ConsumerState<MyApp> {
       if (shouldNavigate) {
         final navigator = navigatorKey.currentState;
         if (navigator != null) {
-          print('🔄 [MY_APP] Triggering navigation due to auth state change');
+          print('[MY_APP] Triggering navigation due to auth state change');
           WidgetsBinding.instance.addPostFrameCallback((_) {
             // Clear the entire stack and navigate to appropriate screen
             if (next.isAuthenticated && next.user != null) {
               final user = next.user!;
-              print('🔄 [MY_APP] User authenticated: ${user.email}');
+              print('[MY_APP] User authenticated: ${user.email}');
 
               // Determine which screen to navigate to
               Widget targetScreen;
               if (!user.isEmailVerified) {
                 print(
-                  '🔄 [MY_APP] Email not verified, navigating to EmailVerificationScreen',
+                  '[MY_APP] Email not verified, navigating to EmailVerificationScreen',
                 );
                 targetScreen = const EmailVerificationScreen();
               } else if (user.allergies.isEmpty) {
                 print(
-                  '🔄 [MY_APP] No allergies set, navigating to AllergySelectionScreen',
+                  '[MY_APP] No allergies set, navigating to AllergySelectionScreen',
                 );
                 targetScreen = const AllergySelectionScreen();
               } else {
-                print('🔄 [MY_APP] User fully set up, navigating to HomeView');
+                print('[MY_APP] User fully set up, navigating to HomeView');
                 targetScreen = const HomeView();
               }
 
@@ -103,7 +101,7 @@ class _MyAppState extends ConsumerState<MyApp> {
               );
             } else {
               print(
-                '🔄 [MY_APP] User not authenticated, navigating to OnboardingScreen',
+                '[MY_APP] User not authenticated, navigating to OnboardingScreen',
               );
               navigator.pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const OnboardingScreen()),
@@ -113,7 +111,7 @@ class _MyAppState extends ConsumerState<MyApp> {
           });
         }
       } else {
-        print('🔄 [MY_APP] No navigation needed - conditions not met');
+        print('[MY_APP] No navigation needed - conditions not met');
       }
     });
 
@@ -139,38 +137,38 @@ class AuthWrapper extends ConsumerWidget {
 
     // ✅ DEBUG: Log auth state changes for debugging
     print(
-      '🔄 [AUTH_WRAPPER] Building with state: isAuth=${authState.isAuthenticated}, isInit=${authState.isInitialized}, isLoading=${authState.isLoading}, user=${authState.user?.email ?? 'null'}',
+      '[AUTH_WRAPPER] Building with state: isAuth=${authState.isAuthenticated}, isInit=${authState.isInitialized}, isLoading=${authState.isLoading}, user=${authState.user?.email ?? 'null'}',
     );
 
     // Show loading screen while initializing
     if (!authState.isInitialized) {
-      print('🔄 [AUTH_WRAPPER] Showing loading screen - not initialized');
+      print('[AUTH_WRAPPER] Showing loading screen - not initialized');
       return const LoadingScreen();
     }
 
     // Handle initial screen based on auth state
     if (!authState.isAuthenticated) {
-      print('🔄 [AUTH_WRAPPER] Showing onboarding - not authenticated');
+      print('[AUTH_WRAPPER] Showing onboarding - not authenticated');
       return const OnboardingScreen();
     }
 
     final user = authState.user!;
     print(
-      '🔄 [AUTH_WRAPPER] User authenticated: ${user.email}, emailVerified=${user.isEmailVerified}, allergies=${user.allergies.length}',
+      '[AUTH_WRAPPER] User authenticated: ${user.email}, emailVerified=${user.isEmailVerified}, allergies=${user.allergies.length}',
     );
 
     // User is authenticated, determine which screen to show
     if (!user.isEmailVerified) {
-      print('🔄 [AUTH_WRAPPER] Showing email verification screen');
+      print('[AUTH_WRAPPER] Showing email verification screen');
       return const EmailVerificationScreen();
     }
 
     if (user.allergies.isEmpty) {
-      print('🔄 [AUTH_WRAPPER] Showing allergy selection screen');
+      print('[AUTH_WRAPPER] Showing allergy selection screen');
       return const AllergySelectionScreen();
     }
 
-    print('🔄 [AUTH_WRAPPER] Showing home view');
+    print('[AUTH_WRAPPER] Showing home view');
 
     // Check for pending notification tap when showing home view
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -198,11 +196,16 @@ class _DemoHomeViewState extends ConsumerState<DemoHomeView> {
   void initState() {
     super.initState();
 
+    // Reset demo flags for fresh behavior
+    PenReminderController.resetDemoFlag();
+    resetDialogFlag(); // Reset dialog flag too
+    _demoInitialized = false;
+
     // DEMO: Initialize pen reminder when user reaches home screen (fully signed up)
     if (!_demoInitialized) {
       _demoInitialized = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        print('🔔 [DEMO] User reached home screen - initializing pen reminder');
+        print('[DEMO] User reached home screen - initializing pen reminder');
         ref
             .read(penReminderControllerProvider.notifier)
             .initialize(navigatorKey: widget.navigatorKey);

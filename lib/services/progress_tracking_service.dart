@@ -14,24 +14,24 @@ class ProgressTrackingService {
   /// Save a completed training session
   Future<void> saveTrainingSession(TrainingSession session) async {
     try {
-      debugPrint('💾 [PROGRESS] Saving training session: ${session.sessionId}');
+      debugPrint('[PROGRESS] Saving training session: ${session.sessionId}');
 
       await _firestore
           .collection(_sessionsCollection)
           .doc(session.sessionId)
           .set(session.toJson());
 
-      debugPrint('✅ [PROGRESS] Training session saved successfully');
+      debugPrint('[PROGRESS] Training session saved successfully');
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error saving training session: $e');
+      debugPrint('[PROGRESS] Error saving training session: $e');
 
       // Don't rethrow for permission errors to avoid breaking the training flow
       if (e.toString().contains('permission-denied')) {
         debugPrint(
-          '⚠️ [PROGRESS] Firestore permission denied - training will continue without cloud save',
+          '[PROGRESS] Firestore permission denied - training will continue without cloud save',
         );
         debugPrint(
-          '💡 [PROGRESS] Please update Firestore security rules to enable progress tracking',
+          '[PROGRESS] Please update Firestore security rules to enable progress tracking',
         );
         return; // Allow training to continue
       }
@@ -48,7 +48,7 @@ class ProgressTrackingService {
     required TrainingSession session,
   }) async {
     try {
-      debugPrint('📈 [PROGRESS] Updating user progress for: $userId');
+      debugPrint('[PROGRESS] Updating user progress for: $userId');
 
       final userProgressRef = _firestore
           .collection(_userProgressCollection)
@@ -83,14 +83,14 @@ class ProgressTrackingService {
         transaction.set(userProgressRef, updatedProgress.toJson());
       });
 
-      debugPrint('✅ [PROGRESS] User progress updated successfully');
+      debugPrint('[PROGRESS] User progress updated successfully');
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error updating user progress: $e');
+      debugPrint('[PROGRESS] Error updating user progress: $e');
 
       // Don't rethrow for permission errors to avoid breaking the training flow
       if (e.toString().contains('permission-denied')) {
         debugPrint(
-          '⚠️ [PROGRESS] Firestore permission denied - progress not saved to cloud',
+          '[PROGRESS] Firestore permission denied - progress not saved to cloud',
         );
         return; // Allow training to continue
       }
@@ -115,7 +115,7 @@ class ProgressTrackingService {
       final userProgress = UserProgress.fromJson(userProgressDoc.data()!);
       return userProgress.scenarioProgress[scenarioId];
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting scenario progress: $e');
+      debugPrint('[PROGRESS] Error getting scenario progress: $e');
       return null;
     }
   }
@@ -132,7 +132,7 @@ class ProgressTrackingService {
 
       return UserProgress.fromJson(userProgressDoc.data()!);
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting user progress: $e');
+      debugPrint('[PROGRESS] Error getting user progress: $e');
       return null;
     }
   }
@@ -154,7 +154,7 @@ class ProgressTrackingService {
           .map((doc) => TrainingSession.fromJson(doc.data()))
           .toList();
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting user sessions: $e');
+      debugPrint('[PROGRESS] Error getting user sessions: $e');
       return [];
     }
   }
@@ -176,7 +176,7 @@ class ProgressTrackingService {
           .map((doc) => TrainingSession.fromJson(doc.data()))
           .toList();
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting scenario sessions: $e');
+      debugPrint('[PROGRESS] Error getting scenario sessions: $e');
       return [];
     }
   }
@@ -188,7 +188,9 @@ class ProgressTrackingService {
   ) async {
     try {
       // Restaurant scenarios are always unlocked for testing
-      if (scenario.id == 'restaurant_beginner' || scenario.id == 'restaurant_advanced') return true;
+      if (scenario.id == 'restaurant_beginner' ||
+          scenario.id == 'restaurant_advanced')
+        return true;
 
       final userProgress = await getUserProgress(userId);
       if (userProgress == null) return false;
@@ -201,7 +203,7 @@ class ProgressTrackingService {
 
       return scenario.isUnlocked;
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error checking scenario unlock: $e');
+      debugPrint('[PROGRESS] Error checking scenario unlock: $e');
       return false;
     }
   }
@@ -220,7 +222,7 @@ class ProgressTrackingService {
 
       return allMasteredSkills.toList();
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting mastered skills: $e');
+      debugPrint('[PROGRESS] Error getting mastered skills: $e');
       return [];
     }
   }
@@ -233,7 +235,7 @@ class ProgressTrackingService {
 
       return userProgress.unlockedAchievements;
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting achievements: $e');
+      debugPrint('[PROGRESS] Error getting achievements: $e');
       return [];
     }
   }
@@ -272,7 +274,7 @@ class ProgressTrackingService {
         }
       });
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error awarding achievement: $e');
+      debugPrint('[PROGRESS] Error awarding achievement: $e');
     }
   }
 
@@ -301,7 +303,7 @@ class ProgressTrackingService {
         'nextLevelPoints': nextLevelThreshold - currentLevelThreshold,
       };
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting level info: $e');
+      debugPrint('[PROGRESS] Error getting level info: $e');
       return {
         'currentLevel': 1,
         'currentLevelPoints': 0,
@@ -593,7 +595,7 @@ class ProgressTrackingService {
           )
           .toList();
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting leaderboard: $e');
+      debugPrint('[PROGRESS] Error getting leaderboard: $e');
       return [];
     }
   }
@@ -608,7 +610,7 @@ class ProgressTrackingService {
       final latestSession = sessions.first;
       return latestSession.finalAssessment?.totalScore;
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting latest session score: $e');
+      debugPrint('[PROGRESS] Error getting latest session score: $e');
       return null;
     }
   }
@@ -623,7 +625,7 @@ class ProgressTrackingService {
       final firstSession = sessions.last;
       return firstSession.finalAssessment?.totalScore;
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error getting first session score: $e');
+      debugPrint('[PROGRESS] Error getting first session score: $e');
       return null;
     }
   }
@@ -648,7 +650,7 @@ class ProgressTrackingService {
       );
       return improvement;
     } catch (e) {
-      debugPrint('❌ [PROGRESS] Error calculating improvement rate: $e');
+      debugPrint('[PROGRESS] Error calculating improvement rate: $e');
       return 0.0;
     }
   }

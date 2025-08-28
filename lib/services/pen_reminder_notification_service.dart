@@ -163,6 +163,8 @@ class PenReminderNotificationService {
   /// Show the pen reminder dialog
   static void _showPenReminderDialog(BuildContext context) {
     if (_onNotificationTapCallback != null) {
+      print('🔔 Notification callback triggered');
+      print('🔔 Context: $context');
       _onNotificationTapCallback!(context);
     }
   }

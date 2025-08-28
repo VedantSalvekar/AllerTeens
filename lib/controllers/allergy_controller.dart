@@ -2,10 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
-/// List of the 14 major EU allergens
-///
-/// This list contains the 14 allergens that must be declared
-/// by law in the EU and UK food labeling regulations.
 class AllergenConstants {
   static const List<String> majorAllergens = [
     'Peanuts',
@@ -25,25 +21,11 @@ class AllergenConstants {
   ];
 }
 
-/// State for allergy selection
-///
-/// Manages the current state of allergen selection including
-/// selected allergens, filtered allergens based on search,
-/// and loading states for save operations.
 class AllergySelectionState {
-  /// Set of currently selected allergens
   final Set<String> selectedAllergens;
-
-  /// Current search query for filtering allergens
   final String searchQuery;
-
-  /// Whether a save operation is in progress
   final bool isLoading;
-
-  /// Error message if save operation failed
   final String? error;
-
-  /// List of allergens filtered by search query
   final List<String> filteredAllergens;
 
   const AllergySelectionState({
@@ -104,7 +86,7 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
         );
       }
     } catch (e) {
-      print('⚠️ [ALLERGY] Failed to load user allergens: $e');
+      print('[ALLERGY] Failed to load user allergens: $e');
       // Don't show error for this - just continue with empty selection
     }
   }
@@ -114,16 +96,16 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
   /// Adds the allergen to selected set if not already selected,
   /// removes it if already selected.
   void toggleAllergen(String allergen) {
-    print('🔵 [ALLERGY] Toggling allergen: $allergen');
+    print('[ALLERGY] Toggling allergen: $allergen');
 
     final newSelectedAllergens = Set<String>.from(state.selectedAllergens);
 
     if (newSelectedAllergens.contains(allergen)) {
       newSelectedAllergens.remove(allergen);
-      print('➖ [ALLERGY] Removed allergen: $allergen');
+      print('[ALLERGY] Removed allergen: $allergen');
     } else {
       newSelectedAllergens.add(allergen);
-      print('➕ [ALLERGY] Added allergen: $allergen');
+      print('[ALLERGY] Added allergen: $allergen');
     }
 
     state = state.copyWith(
@@ -131,7 +113,7 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
       error: null,
     );
 
-    print('🔍 [ALLERGY] Current selection: $newSelectedAllergens');
+    print('[ALLERGY] Current selection: $newSelectedAllergens');
   }
 
   /// Update search query and filter allergens
@@ -139,7 +121,7 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
   /// Filters the list of allergens based on the search query.
   /// Search is case-insensitive and matches partial strings.
   void updateSearchQuery(String query) {
-    print('🔍 [ALLERGY] Updating search query: "$query"');
+    print('[ALLERGY] Updating search query: "$query"');
 
     final filteredAllergens = AllergenConstants.majorAllergens
         .where(
@@ -152,12 +134,12 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
       filteredAllergens: filteredAllergens,
     );
 
-    print('📋 [ALLERGY] Filtered allergens: $filteredAllergens');
+    print('[ALLERGY] Filtered allergens: $filteredAllergens');
   }
 
   /// Clear search query and reset filter
   void clearSearch() {
-    print('🧹 [ALLERGY] Clearing search query');
+    print('[ALLERGY] Clearing search query');
     state = state.copyWith(
       searchQuery: '',
       filteredAllergens: AllergenConstants.majorAllergens,
@@ -170,17 +152,17 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
   /// Returns true if successful, false otherwise.
   Future<bool> saveSelectedAllergens() async {
     print(
-      '💾 [ALLERGY] Starting to save selected allergens: ${state.selectedAllergens}',
+      '[ALLERGY] Starting to save selected allergens: ${state.selectedAllergens}',
     );
 
     // Don't save if already saving
     if (state.isLoading) {
-      print('⚠️ [ALLERGY] Already saving allergens, skipping...');
+      print('[ALLERGY] Already saving allergens, skipping...');
       return false;
     }
 
     if (state.selectedAllergens.isEmpty) {
-      print('⚠️ [ALLERGY] No allergens selected, proceeding without saving');
+      print('[ALLERGY] No allergens selected, proceeding without saving');
       return true; // Allow users to proceed without selecting allergens
     }
 
@@ -192,7 +174,7 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
 
       // Retry if user not found (race condition)
       if (currentUser == null) {
-        print('⚠️ [ALLERGY] User not found, retrying...');
+        print('[ALLERGY] User not found, retrying...');
         await Future.delayed(const Duration(milliseconds: 500));
         currentUser = await _authService.getCurrentUserModel();
       }
@@ -217,11 +199,11 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
       state = state.copyWith(isLoading: false, error: null);
 
       print(
-        '✅ [ALLERGY] Successfully saved allergens: ${state.selectedAllergens}',
+        '[ALLERGY] Successfully saved allergens: ${state.selectedAllergens}',
       );
       return true;
     } catch (e) {
-      print('❌ [ALLERGY] Failed to save allergens: $e');
+      print('[ALLERGY] Failed to save allergens: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to save allergens: $e',
@@ -232,13 +214,13 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
 
   /// Clear all selected allergens
   void clearSelection() {
-    print('🧹 [ALLERGY] Clearing all selected allergens');
+    print('[ALLERGY] Clearing all selected allergens');
     state = state.copyWith(selectedAllergens: const {}, error: null);
   }
 
   /// Reset the entire state
   void resetState() {
-    print('🔄 [ALLERGY] Resetting allergy selection state');
+    print('[ALLERGY] Resetting allergy selection state');
     state = const AllergySelectionState();
   }
 
@@ -252,7 +234,7 @@ class AllergyController extends StateNotifier<AllergySelectionState> {
       }
       return null;
     } catch (e) {
-      print('⚠️ [ALLERGY] Failed to get user first name: $e');
+      print('[ALLERGY] Failed to get user first name: $e');
       return null;
     }
   }
