@@ -69,7 +69,7 @@ class ProductScanController extends StateNotifier<ProductScanState> {
       print('[SCAN] Scanner not started - currently loading previous scan');
       return;
     }
-    
+
     state = state.copyWith(isScanning: true, error: null);
     print('[SCAN] Camera scanner opened - isScanning: true');
   }
@@ -184,7 +184,7 @@ class ProductScanController extends StateNotifier<ProductScanState> {
 
       final response = await http.get(
         Uri.parse(url),
-        headers: {'User-Agent': 'AllerWise/1.0.0 (allergen management app)'},
+        headers: {'User-Agent': 'allerteens/1.0.0 (allergen management app)'},
       );
 
       if (response.statusCode == 200) {

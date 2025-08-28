@@ -5,7 +5,7 @@ import '../../core/constants.dart';
 ///
 /// This widget displays an allergen name in a pill-shaped button style
 /// with different visual states for selected and unselected states.
-/// It follows the AllerWise design system with proper colors and spacing.
+/// It follows the AllerTeens design system with proper colors and spacing.
 class AllergenTag extends StatelessWidget {
   /// The allergen name to display
   final String allergenName;

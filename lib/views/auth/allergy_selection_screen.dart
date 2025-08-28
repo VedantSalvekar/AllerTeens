@@ -7,15 +7,6 @@ import '../../shared/widgets/allergen_tag.dart';
 import '../../core/constants.dart';
 import 'medical_info_screen.dart';
 
-/// Allergy Selection Screen for AllerWise
-///
-/// This screen appears after user signup to allow users to select their
-/// known food allergens from the 14 major EU allergens. The screen includes:
-/// - Step indicator (3-dot style)
-/// - Welcome message with user's first name
-/// - Search functionality for allergens
-/// - Pill-style allergen selection buttons
-/// - Navigation options (Back, Skip, Continue)
 class AllergySelectionScreen extends ConsumerStatefulWidget {
   const AllergySelectionScreen({super.key});
 

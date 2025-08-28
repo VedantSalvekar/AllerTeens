@@ -5,7 +5,7 @@ import '../../controllers/auth_controller.dart';
 import '../../core/constants.dart';
 import '../home/home_view.dart';
 
-/// Medical Information Screen for AllerWise
+/// Medical Information Screen for AllerTeens
 ///
 /// This screen appears after allergy selection to collect:
 /// - Medication information (name, dosage, frequency)

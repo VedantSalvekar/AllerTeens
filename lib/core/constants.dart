@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Constants for AllerWise application
+/// Constants for AllerTeens application
 class AppConstants {
   // App information
-  static const String appName = 'AllerWise';
+  static const String appName = 'allerteens';
   static const String appVersion = '1.0.0';
   static const String appDescription =
       'A mobile app for adolescents with severe food allergies';
@@ -216,7 +216,7 @@ class AssetPaths {
   static const String placeholderImagePath = 'assets/images/placeholder.png';
 }
 
-/// AllerWise Color Palette
+/// AllerTeens Color Palette
 class AppColors {
   // Primary colors from your palette
   static const Color primary = Color(0xFF007C91); // Teal #007C91

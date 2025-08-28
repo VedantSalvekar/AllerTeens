@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.allerwise.app" "\0"
-            VALUE "FileDescription", "allerwise" "\0"
+            VALUE "CompanyName", "com.allerteens.app" "\0"
+            VALUE "FileDescription", "AllerTeens" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "allerwise" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.allerwise.app. All rights reserved." "\0"
-            VALUE "OriginalFilename", "allerwise.exe" "\0"
-            VALUE "ProductName", "allerwise" "\0"
+            VALUE "InternalName", "allerteens" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2025 com.allerteens.app. All rights reserved." "\0"
+            VALUE "OriginalFilename", "allerteens.exe" "\0"
+            VALUE "ProductName", "AllerTeens" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

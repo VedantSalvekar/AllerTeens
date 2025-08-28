@@ -1,4 +1,4 @@
-# AllerWise - AI-Powered Allergy Training App
+# allerteens - AI-Powered Allergy Training App
 
 A Flutter application with integrated AI conversation system for allergy training and education.
 
@@ -27,7 +27,7 @@ A Flutter application with integrated AI conversation system for allergy trainin
 
    ```bash
    git clone <repository-url>
-   cd AllerWise
+   cd allerteens
    ```
 
 2. Install dependencies:

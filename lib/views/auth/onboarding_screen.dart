@@ -5,7 +5,7 @@ import '../../core/constants.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
-/// Modern onboarding screen for AllerWise matching the exact design
+/// Modern onboarding screen for AllerTeens matching the exact design
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -74,7 +74,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
                     // App name
                     Text(
-                      'AllerWise',
+                      'AllerTeens',
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,

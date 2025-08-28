@@ -16,7 +16,7 @@ workflows:
       android_signing:
         - keystore_reference
       vars:
-        PACKAGE_NAME: "com.allerwise.app.allerwise"
+        PACKAGE_NAME: "com.allerteens.app.allerteens"
         GOOGLE_PLAY_TRACK: internal
       flutter: stable
     scripts:
@@ -64,11 +64,11 @@ workflows:
     environment:
       ios_signing:
         distribution_type: development
-        bundle_identifier: com.allerwise.app.allerwise
+        bundle_identifier: com.allerteens.app.allerteens
       vars:
         XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "com.allerwise.app.allerwise"
+        BUNDLE_ID: "com.allerteens.app.allerteens"
         # APP_STORE_CONNECT_ISSUER_ID: $APP_STORE_CONNECT_ISSUER_ID
         # APP_STORE_CONNECT_KEY_IDENTIFIER: $APP_STORE_CONNECT_KEY_IDENTIFIER
         # APP_STORE_CONNECT_PRIVATE_KEY: $APP_STORE_CONNECT_PRIVATE_KEY

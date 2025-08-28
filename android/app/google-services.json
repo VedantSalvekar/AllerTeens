@@ -1,15 +1,15 @@
 {
   "project_info": {
     "project_number": "539686644208",
-    "project_id": "allerwise-9635e",
-    "storage_bucket": "allerwise-9635e.firebasestorage.app"
+    "project_id": "allerteens-9635e",
+    "storage_bucket": "allerteens-9635e.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
         "mobilesdk_app_id": "1:539686644208:android:eb6220d9a9e792f5acd535",
         "android_client_info": {
-          "package_name": "com.allerwise.app.allerwise"
+          "package_name": "com.allerteens.app.allerteens"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "539686644208-vr9fot8ev7bjtb6rvbmbvguqns77oja8.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.allerwise.app.allerwise",
+            "package_name": "com.allerteens.app.allerteens",
             "certificate_hash": "3bfa67d2fe5112c11fde04a6150894589cb5495c"
           }
         },
@@ -42,7 +42,7 @@
               "client_id": "539686644208-qj4n2dj1jbv0ecgu78psm7ik7ssdml5c.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.allerwise.app.allerwise"
+                "bundle_id": "com.allerteens.app.allerteens"
               }
             }
           ]
