@@ -41,7 +41,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
     // Listen to auth state changes for error handling only
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
-      if (next.error != null) {
+      if (next.error != null && previous?.error != next.error) {
         _showErrorSnackBar(context, next.error!);
       }
     });

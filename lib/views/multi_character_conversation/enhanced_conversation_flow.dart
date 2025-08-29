@@ -15,18 +15,17 @@ class EnhancedConversationFlow {
     required bool severityExplained,
   }) {
     final input = userInput.toLowerCase();
-    
+
     // Trigger AI-to-AI in these scenarios:
     return (
-      // First time mentioning allergies
-      (input.contains('allergic') && !allergyExplained) ||
-      // When user explains severity but friends are still skeptical
-      (severityExplained && conversationStage < 3) ||
-      // Random chance for natural conversation flow
-      (totalMessages > 3 && totalMessages % 4 == 0) ||
-      // When user mentions specific severe symptoms
-      (input.contains('anaphylaxis') || input.contains('epipen'))
-    );
+    // First time mentioning allergies
+    (input.contains('allergic') && !allergyExplained) ||
+        // When user explains severity but friends are still skeptical
+        (severityExplained && conversationStage < 3) ||
+        // Random chance for natural conversation flow
+        (totalMessages > 3 && totalMessages % 4 == 0) ||
+        // When user mentions specific severe symptoms
+        (input.contains('anaphylaxis') || input.contains('epipen')));
   }
 
   /// Gets the pause duration between speakers based on conversation context
@@ -38,11 +37,11 @@ class EnhancedConversationFlow {
     if (isEmergencyTopic || conversationStage >= 4) {
       return _shortPause; // Faster responses when serious
     }
-    
+
     if (lastMessage.length > 50) {
       return Duration(seconds: 3); // Longer pause for longer messages
     }
-    
+
     return _defaultPauseBetweenSpeakers;
   }
 
@@ -122,7 +121,9 @@ class EnhancedConversationFlow {
     required int messageCount,
   }) {
     if (kDebugMode) {
-      debugPrint('🎭 CONVERSATION FLOW: [$messageCount] $speaker (Stage $stage): ${message.substring(0, 30)}...');
+      debugPrint(
+        '🎭 CONVERSATION FLOW: [$messageCount] $speaker (Stage $stage): ${message.substring(0, 30)}...',
+      );
     }
   }
 }

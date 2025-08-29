@@ -50,22 +50,24 @@ class ProductScanResult {
   }) {
     final productName = productData['product_name'] as String?;
     final imageUrl = productData['image_url'] as String?;
-    
+
     // Parse ingredients
     final ingredientsText = productData['ingredients_text'] as String? ?? '';
-    final ingredients = ingredientsText.isNotEmpty 
-        ? [ingredientsText] 
+    final ingredients = ingredientsText.isNotEmpty
+        ? [ingredientsText]
         : <String>[];
 
     // Parse allergens
-    final allergensTags = (productData['allergens_tags'] as List?)?.cast<String>() ?? <String>[];
+    final allergensTags =
+        (productData['allergens_tags'] as List?)?.cast<String>() ?? <String>[];
     final allergens = allergensTags
         .map((tag) => _cleanAllergenTag(tag))
         .where((allergen) => allergen.isNotEmpty)
         .toList();
 
     // Parse traces
-    final tracesTags = (productData['traces_tags'] as List?)?.cast<String>() ?? <String>[];
+    final tracesTags =
+        (productData['traces_tags'] as List?)?.cast<String>() ?? <String>[];
     final traces = tracesTags
         .map((tag) => _cleanAllergenTag(tag))
         .where((trace) => trace.isNotEmpty)
@@ -79,8 +81,8 @@ class ProductScanResult {
       ingredients: ingredients,
     );
 
-    final verdict = matchedAllergens.isEmpty 
-        ? AllergenVerdict.safe 
+    final verdict = matchedAllergens.isEmpty
+        ? AllergenVerdict.safe
         : AllergenVerdict.risky;
 
     return ProductScanResult(
@@ -125,8 +127,11 @@ class ProductScanResult {
       traces: (data['traces'] as List?)?.cast<String>() ?? [],
       isSuccessful: data['isSuccessful'] as bool,
       errorMessage: data['errorMessage'] as String?,
-      verdict: AllergenVerdict.fromString(data['verdict'] as String? ?? 'unknown'),
-      matchedAllergens: (data['matchedAllergens'] as List?)?.cast<String>() ?? [],
+      verdict: AllergenVerdict.fromString(
+        data['verdict'] as String? ?? 'unknown',
+      ),
+      matchedAllergens:
+          (data['matchedAllergens'] as List?)?.cast<String>() ?? [],
       scannedAt: (data['scannedAt'] as Timestamp).toDate(),
     );
   }
@@ -147,18 +152,21 @@ class ProductScanResult {
     required List<String> ingredients,
   }) {
     final matched = <String>[];
-    
+
     for (final userAllergen in userAllergens) {
       final userAllergenLower = userAllergen.toLowerCase().trim();
-      
+
       // Check direct allergen matches
       for (final productAllergen in productAllergens) {
-        if (_isAllergenMatch(userAllergenLower, productAllergen.toLowerCase().trim())) {
+        if (_isAllergenMatch(
+          userAllergenLower,
+          productAllergen.toLowerCase().trim(),
+        )) {
           matched.add(userAllergen);
           break;
         }
       }
-      
+
       // Check trace matches
       for (final trace in productTraces) {
         if (_isAllergenMatch(userAllergenLower, trace.toLowerCase().trim())) {
@@ -166,7 +174,7 @@ class ProductScanResult {
           break;
         }
       }
-      
+
       // Check ingredient text matches
       for (final ingredient in ingredients) {
         if (ingredient.toLowerCase().contains(userAllergenLower)) {
@@ -175,38 +183,46 @@ class ProductScanResult {
         }
       }
     }
-    
+
     return matched.toSet().toList(); // Remove duplicates
   }
 
   /// Check if two allergen strings match (with variations)
   static bool _isAllergenMatch(String userAllergen, String productAllergen) {
     if (userAllergen == productAllergen) return true;
-    
+
     // Handle common variations
     final allergenMappings = {
       'milk': ['dairy', 'lactose', 'casein', 'whey'],
       'eggs': ['egg'],
       'peanuts': ['peanut', 'groundnut'],
-      'tree nuts': ['nuts', 'almonds', 'walnuts', 'hazelnuts', 'cashews', 'pistachios', 'pecans'],
+      'tree nuts': [
+        'nuts',
+        'almonds',
+        'walnuts',
+        'hazelnuts',
+        'cashews',
+        'pistachios',
+        'pecans',
+      ],
       'wheat': ['gluten'],
       'soya': ['soy', 'soybean'],
       'fish': ['seafood'],
       'crustaceans': ['shellfish', 'shrimp', 'crab', 'lobster'],
       'molluscs': ['mussels', 'oysters', 'clams', 'squid'],
     };
-    
+
     // Check if user allergen has variations that match product allergen
     final variations = allergenMappings[userAllergen] ?? [];
     if (variations.contains(productAllergen)) return true;
-    
+
     // Check reverse mapping
     for (final entry in allergenMappings.entries) {
       if (entry.value.contains(userAllergen) && entry.key == productAllergen) {
         return true;
       }
     }
-    
+
     return false;
   }
 }
@@ -285,7 +301,9 @@ class ScanHistoryEntry {
     return ScanHistoryEntry(
       id: id,
       userId: data['userId'] as String,
-      scanResult: ProductScanResult.fromFirestore(data['scanResult'] as Map<String, dynamic>),
+      scanResult: ProductScanResult.fromFirestore(
+        data['scanResult'] as Map<String, dynamic>,
+      ),
       createdAt: (data['createdAt'] as Timestamp).toDate(),
     );
   }

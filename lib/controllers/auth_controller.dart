@@ -86,39 +86,27 @@ class AuthController extends StateNotifier<AuthState> {
 
             if (user != null) {
               print('[AUTH_CONTROLLER] User signed in, updating state...');
-              // Get user model from Firestore with retry logic
-              UserModel? userModel = await _authService.getCurrentUserModel();
 
-              // Retry if user not found (might be a race condition)
-              if (userModel == null) {
-                print('[AUTH_CONTROLLER] User model not found, retrying...');
-                await Future.delayed(const Duration(milliseconds: 1000));
-                userModel = await _authService.getCurrentUserModel();
-              }
+              // Create immediate basic model to prevent UI blocking
+              UserModel basicUserModel = UserModel.fromFirebaseUser(
+                uid: user.uid,
+                email: user.email!,
+                displayName: user.displayName,
+                photoUrl: user.photoURL,
+                isEmailVerified: user.emailVerified,
+              );
 
-              // If still null, create a basic user model from Firebase Auth
-              if (userModel == null) {
-                print(
-                  '[AUTH_CONTROLLER] Creating basic user model from Firebase Auth...',
-                );
-                userModel = UserModel.fromFirebaseUser(
-                  uid: user.uid,
-                  email: user.email!,
-                  displayName: user.displayName,
-                  photoUrl: user.photoURL,
-                  isEmailVerified: user.emailVerified,
-                );
-              }
-
+              // Update state immediately for fast UI response
               state = state.copyWith(
-                user: userModel,
+                user: basicUserModel,
                 isLoading: false,
                 error: null,
                 isInitialized: true,
               );
-              print(
-                '[AUTH_CONTROLLER] State updated for login: ${userModel.email}',
-              );
+              print('[AUTH_CONTROLLER] State updated with basic user info');
+
+              // Try to get enhanced user data from Firestore with retry logic
+              _loadUserDataWithRetry(user.uid, basicUserModel);
             } else {
               print('[AUTH_CONTROLLER] User signed out, updating state...');
               final newState = AuthState(
@@ -199,6 +187,13 @@ class AuthController extends StateNotifier<AuthState> {
       } else {
         print('[AUTH] Sign up failed with error: ${result.error}');
         state = state.copyWith(isLoading: false, error: result.error);
+
+        // Auto-clear error after 10 seconds to prevent continuous display
+        Future.delayed(Duration(seconds: 10), () {
+          if (state.error == result.error) {
+            state = state.copyWith(error: null);
+          }
+        });
       }
     } on Exception catch (e) {
       print('[AUTH] Sign up exception: $e');
@@ -243,6 +238,13 @@ class AuthController extends StateNotifier<AuthState> {
       } else {
         print('[AUTH] Sign in failed with error: ${result.error}');
         state = state.copyWith(isLoading: false, error: result.error);
+
+        // Auto-clear error after 10 seconds to prevent continuous display
+        Future.delayed(Duration(seconds: 10), () {
+          if (state.error == result.error) {
+            state = state.copyWith(error: null);
+          }
+        });
       }
     } catch (e) {
       print('[AUTH] Sign in exception: $e');
@@ -279,6 +281,13 @@ class AuthController extends StateNotifier<AuthState> {
         } else {
           print('[AUTH] Google Sign In failed with error: ${result.error}');
           state = state.copyWith(isLoading: false, error: result.error);
+
+          // Auto-clear error after 10 seconds to prevent continuous display
+          Future.delayed(Duration(seconds: 10), () {
+            if (state.error == result.error) {
+              state = state.copyWith(error: null);
+            }
+          });
         }
       }
     } catch (e) {
@@ -292,7 +301,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// Sign out
   Future<void> signOut() async {
-    // ✅ PREVENT: Don't allow multiple simultaneous logout calls
+    // PREVENT: Don't allow multiple simultaneous logout calls
     if (state.isLoading) {
       return;
     }
@@ -360,11 +369,22 @@ class AuthController extends StateNotifier<AuthState> {
       final result = await _authService.updateUserProfile(userModel);
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          user: result.user,
+        print('[AUTH_CONTROLLER] Profile update successful, updating state');
+
+        // Force new state object to ensure UI updates
+        state = AuthState(
+          user: userModel, // Use the input userModel which has the latest data
           isLoading: false,
           error: null,
+          isInitialized: true,
         );
+
+        print(
+          '[AUTH_CONTROLLER] State updated with new profile data: ${userModel.allergies}',
+        );
+
+        // Force refresh from Firestore to ensure data consistency
+        await _refreshUserFromFirestore();
       } else {
         state = state.copyWith(isLoading: false, error: result.error);
       }
@@ -442,6 +462,76 @@ class AuthController extends StateNotifier<AuthState> {
         error: 'Failed to bypass email verification: $e',
       );
     }
+  }
+
+  /// Refresh user data from Firestore to ensure consistency
+  Future<void> _refreshUserFromFirestore() async {
+    try {
+      print('[AUTH_CONTROLLER] Refreshing user data from Firestore...');
+      final userModel = await _authService.getCurrentUserModel();
+
+      if (userModel != null) {
+        // Force a new state object to trigger UI updates
+        state = AuthState(
+          user: userModel,
+          isLoading: false,
+          error: null,
+          isInitialized: true,
+        );
+        print(
+          '[AUTH_CONTROLLER] Successfully refreshed user data: ${userModel.allergies}',
+        );
+      }
+    } catch (e) {
+      print('[AUTH_CONTROLLER] Failed to refresh user data: $e');
+    }
+  }
+
+  /// Load user data with retry logic for Firestore failures
+  Future<void> _loadUserDataWithRetry(
+    String uid,
+    UserModel fallbackModel,
+  ) async {
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(milliseconds: 1500);
+
+    while (retryCount < maxRetries) {
+      try {
+        print(
+          '[AUTH_CONTROLLER] Attempting to load Firestore data (attempt ${retryCount + 1})',
+        );
+        final userModel = await _authService.getCurrentUserModel();
+
+        if (userModel != null) {
+          // Update state with complete Firestore data
+          state = state.copyWith(
+            user: userModel,
+            isLoading: false,
+            error: null,
+            isInitialized: true,
+          );
+          print(
+            '[AUTH_CONTROLLER] Successfully loaded complete user data from Firestore',
+          );
+          return;
+        }
+      } catch (e) {
+        print(
+          '[AUTH_CONTROLLER] Firestore load attempt ${retryCount + 1} failed: $e',
+        );
+        retryCount++;
+
+        if (retryCount < maxRetries) {
+          await Future.delayed(retryDelay);
+        }
+      }
+    }
+
+    print(
+      '[AUTH_CONTROLLER] All Firestore attempts failed, using fallback model',
+    );
+    // Keep the fallback model if all retries failed
   }
 
   /// Clear error state

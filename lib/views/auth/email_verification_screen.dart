@@ -439,7 +439,7 @@ class _EmailVerificationScreenState
                     padding: const EdgeInsets.only(top: 24),
                     child: Text(
                       kDebugMode
-                          ? 'Having trouble? Use the developer mode button above, or try signing in with Google instead.'
+                          ? 'Having trouble? Use the developer mode button above.'
                           : 'Having trouble? Contact support or try signing in with Google instead.',
                       style: AppTextStyles.bodyText2.copyWith(
                         color: AppColors.grey,

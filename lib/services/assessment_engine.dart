@@ -25,9 +25,7 @@ class AssessmentEngine {
     required DateTime sessionStart,
     required DateTime sessionEnd,
   }) async {
-    debugPrint(
-      '🎯 [ASSESSMENT] Starting enhanced assessment for level: $level',
-    );
+    debugPrint('[ASSESSMENT] Starting enhanced assessment for level: $level');
 
     try {
       // Use the new scoring engine

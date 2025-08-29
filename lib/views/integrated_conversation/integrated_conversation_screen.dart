@@ -93,9 +93,12 @@ class _IntegratedConversationScreenState
     });
   }
 
+  String? _lastShownError;
+
   void _setupAIControllerCallbacks() {
     _aiController.onError = (error) {
-      if (mounted) {
+      if (mounted && _lastShownError != error) {
+        _lastShownError = error;
         Color backgroundColor = Colors.red;
 
         // Different colors and messages for different error types
@@ -112,6 +115,11 @@ class _IntegratedConversationScreenState
             duration: Duration(seconds: 4),
           ),
         );
+
+        // Clear the error after showing it to allow the same error to show again later if needed
+        Future.delayed(Duration(seconds: 5), () {
+          _lastShownError = null;
+        });
       }
     };
 

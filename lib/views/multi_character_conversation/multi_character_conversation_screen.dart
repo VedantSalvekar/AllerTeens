@@ -45,9 +45,12 @@ class _MultiCharacterConversationScreenState
     _setupCallbacks();
   }
 
+  String? _lastShownError;
+
   void _setupCallbacks() {
     _aiController.onError = (error) {
-      if (mounted) {
+      if (mounted && _lastShownError != error) {
+        _lastShownError = error;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error),
@@ -55,6 +58,11 @@ class _MultiCharacterConversationScreenState
             duration: const Duration(seconds: 4),
           ),
         );
+
+        // Clear the error after showing it to allow the same error to show again later if needed
+        Future.delayed(Duration(seconds: 5), () {
+          _lastShownError = null;
+        });
       }
     };
 

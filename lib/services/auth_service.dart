@@ -300,58 +300,113 @@ class AuthService {
     }
   }
 
-  /// Save user to Firestore with merge option to prevent overwriting
+  /// Save user to Firestore with retry logic and merge option
   Future<void> _saveUserToFirestore(
     UserModel userModel, {
     bool merge = false,
   }) async {
-    try {
-      print('[AUTH_SERVICE] Converting user model to JSON...');
-      final jsonData = userModel.toJson();
-      print('[AUTH_SERVICE] User JSON: $jsonData');
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(milliseconds: 1000);
 
-      print('[AUTH_SERVICE] Saving to Firestore collection (merge: $merge)...');
+    while (retryCount < maxRetries) {
+      try {
+        print('[AUTH_SERVICE] Converting user model to JSON...');
+        final jsonData = userModel.toJson();
+        print('[AUTH_SERVICE] User JSON: $jsonData');
 
-      if (merge) {
-        // Use merge to prevent overwriting existing user data
-        await _usersCollection
-            .doc(userModel.id)
-            .set(jsonData, SetOptions(merge: true));
-      } else {
-        await _usersCollection.doc(userModel.id).set(jsonData);
+        print(
+          '[AUTH_SERVICE] Saving to Firestore collection (merge: $merge, attempt ${retryCount + 1})...',
+        );
+
+        if (merge) {
+          await _usersCollection
+              .doc(userModel.id)
+              .set(jsonData, SetOptions(merge: true));
+        } else {
+          await _usersCollection.doc(userModel.id).set(jsonData);
+        }
+
+        print('[AUTH_SERVICE] Successfully saved to Firestore');
+        return;
+      } catch (e) {
+        retryCount++;
+        print('[AUTH_SERVICE] Firestore save attempt $retryCount failed: $e');
+
+        if (_isRetryableError(e) && retryCount < maxRetries) {
+          print(
+            '[AUTH_SERVICE] Retrying save in ${retryDelay.inMilliseconds}ms...',
+          );
+          await Future.delayed(retryDelay);
+        } else {
+          print('[AUTH_SERVICE] Save failed after $retryCount attempts');
+          rethrow;
+        }
       }
-
-      print('[AUTH_SERVICE] Successfully saved to Firestore');
-    } catch (e) {
-      print('[AUTH_SERVICE] Error saving to Firestore: $e');
-      print('[AUTH_SERVICE] Error type: ${e.runtimeType}');
-      rethrow;
     }
   }
 
-  /// Get user from Firestore
+  /// Get user from Firestore with retry logic
   Future<UserModel?> _getUserFromFirestore(String uid) async {
-    try {
-      final doc = await _usersCollection.doc(uid).get();
-      if (doc.exists && doc.data() != null) {
-        return UserModel.fromDocument(doc);
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(milliseconds: 1000);
+
+    while (retryCount < maxRetries) {
+      try {
+        print(
+          '[AUTH_SERVICE] Getting user document from Firestore (attempt ${retryCount + 1})',
+        );
+        final doc = await _usersCollection.doc(uid).get();
+        if (doc.exists && doc.data() != null) {
+          print('[AUTH_SERVICE] User document found in Firestore');
+          return UserModel.fromDocument(doc);
+        }
+        print('[AUTH_SERVICE] User document not found in Firestore');
+        return null;
+      } catch (e) {
+        retryCount++;
+        print('[AUTH_SERVICE] Firestore get attempt $retryCount failed: $e');
+
+        if (_isRetryableError(e) && retryCount < maxRetries) {
+          print('[AUTH_SERVICE] Retrying in ${retryDelay.inMilliseconds}ms...');
+          await Future.delayed(retryDelay);
+        } else {
+          print('[AUTH_SERVICE] Non-retryable error or max retries reached');
+          break;
+        }
       }
-      return null;
-    } catch (e) {
-      print('Error getting user from Firestore: $e');
-      return null;
     }
+    return null;
   }
 
-  /// Check if user exists in Firestore
+  /// Check if user exists in Firestore with retry logic
   Future<bool> userExists(String uid) async {
-    try {
-      final doc = await _usersCollection.doc(uid).get();
-      return doc.exists;
-    } catch (e) {
-      print('Error checking user existence: $e');
-      return false;
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(milliseconds: 1000);
+
+    while (retryCount < maxRetries) {
+      try {
+        final doc = await _usersCollection.doc(uid).get();
+        return doc.exists;
+      } catch (e) {
+        retryCount++;
+        print(
+          '[AUTH_SERVICE] User exists check attempt $retryCount failed: $e',
+        );
+
+        if (_isRetryableError(e) && retryCount < maxRetries) {
+          await Future.delayed(retryDelay);
+        } else {
+          print(
+            '[AUTH_SERVICE] User exists check failed after $retryCount attempts',
+          );
+          return false;
+        }
+      }
     }
+    return false;
   }
 
   /// Convert Firebase Auth error to user-friendly message
@@ -382,14 +437,14 @@ class AuthService {
     }
   }
 
-  /// Check if error is network-related
-  bool _isNetworkError(dynamic error) {
-    if (error is FirebaseAuthException) {
-      return error.code == 'network-request-failed' ||
-          error.code == 'unavailable';
-    }
-    return error.toString().toLowerCase().contains('network') ||
-        error.toString().toLowerCase().contains('connection');
+  /// Check if error is retryable for Firestore operations
+  bool _isRetryableError(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+    return errorString.contains('unavailable') ||
+        errorString.contains('deadline exceeded') ||
+        errorString.contains('timeout') ||
+        errorString.contains('network') ||
+        errorString.contains('connection');
   }
 }
 

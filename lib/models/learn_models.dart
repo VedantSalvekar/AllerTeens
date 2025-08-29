@@ -3,10 +3,7 @@ class LearnSection {
   final String heading;
   final List<String> content;
 
-  const LearnSection({
-    required this.heading,
-    required this.content,
-  });
+  const LearnSection({required this.heading, required this.content});
 
   factory LearnSection.fromJson(Map<String, dynamic> json) {
     return LearnSection(
@@ -16,10 +13,7 @@ class LearnSection {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'heading': heading,
-      'content': content,
-    };
+    return {'heading': heading, 'content': content};
   }
 }
 
@@ -28,10 +22,7 @@ class EducationalModule {
   final String title;
   final List<LearnSection> sections;
 
-  const EducationalModule({
-    required this.title,
-    required this.sections,
-  });
+  const EducationalModule({required this.title, required this.sections});
 
   factory EducationalModule.fromJson(Map<String, dynamic> json) {
     return EducationalModule(
@@ -51,21 +42,27 @@ class EducationalModule {
 
   /// Get all allergen-specific sections (excluding general educational content)
   List<LearnSection> get allergenSections {
-    return sections.where((section) => 
-      section.heading != 'Educational:' && 
-      section.heading != 'Allergens:' &&
-      section.heading != 'Tests:' &&
-      section.heading.isNotEmpty
-    ).toList();
+    return sections
+        .where(
+          (section) =>
+              section.heading != 'Educational:' &&
+              section.heading != 'Allergens:' &&
+              section.heading != 'Tests:' &&
+              section.heading.isNotEmpty,
+        )
+        .toList();
   }
 
   /// Get general educational sections
   List<LearnSection> get generalSections {
-    return sections.where((section) => 
-      section.heading == 'Educational:' || 
-      section.heading == 'Allergens:' ||
-      section.heading == 'Tests:'
-    ).toList();
+    return sections
+        .where(
+          (section) =>
+              section.heading == 'Educational:' ||
+              section.heading == 'Allergens:' ||
+              section.heading == 'Tests:',
+        )
+        .toList();
   }
 }
 
@@ -74,10 +71,7 @@ class BehavioralModule {
   final String title;
   final List<LearnSection> sections;
 
-  const BehavioralModule({
-    required this.title,
-    required this.sections,
-  });
+  const BehavioralModule({required this.title, required this.sections});
 
   factory BehavioralModule.fromJson(Map<String, dynamic> json) {
     return BehavioralModule(
@@ -97,10 +91,11 @@ class BehavioralModule {
 
   /// Get sections with meaningful content (excluding empty sections)
   List<LearnSection> get meaningfulSections {
-    return sections.where((section) => 
-      section.content.isNotEmpty && 
-      section.heading.isNotEmpty
-    ).toList();
+    return sections
+        .where(
+          (section) => section.content.isNotEmpty && section.heading.isNotEmpty,
+        )
+        .toList();
   }
 }
 
@@ -109,10 +104,7 @@ class LearnContent {
   final EducationalModule educational;
   final BehavioralModule behavioral;
 
-  const LearnContent({
-    required this.educational,
-    required this.behavioral,
-  });
+  const LearnContent({required this.educational, required this.behavioral});
 
   factory LearnContent.fromJsonData({
     required Map<String, dynamic> educationalJson,
@@ -160,14 +152,16 @@ class AllergenInfo {
     if (allergenIcons.containsKey(heading)) {
       return allergenIcons[heading]!;
     }
-    
+
     // Check for partial matches for different allergen names
     for (String key in allergenIcons.keys) {
-      if (heading.toLowerCase().contains(key.toLowerCase().replaceAll(':', ''))) {
+      if (heading.toLowerCase().contains(
+        key.toLowerCase().replaceAll(':', ''),
+      )) {
         return allergenIcons[key]!;
       }
     }
-    
+
     // Default icon for unknown allergens
     return '📋';
   }
@@ -185,7 +179,7 @@ class AllergenInfo {
       'Co-factors:',
       'Steps:',
     ];
-    
+
     return !nonAllergenHeadings.contains(heading) && heading.isNotEmpty;
   }
 }

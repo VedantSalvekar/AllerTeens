@@ -99,6 +99,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _initializeUserData();
         });
       }
+
+      // Also listen for allergen updates specifically
+      if (previous?.user?.allergies != next.user?.allergies &&
+          next.user != null) {
+        print('[PROFILE_SCREEN] Allergen data updated, refreshing UI');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              // Force UI rebuild with new allergen data
+            });
+          }
+        });
+      }
     });
 
     // Listen for state changes and show messages
@@ -109,6 +122,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (next.successMessage != null &&
           previous?.successMessage != next.successMessage) {
         _showSnackBar(next.successMessage!, isError: false);
+
+        // Force UI refresh after successful update
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              // Trigger UI rebuild with updated data
+            });
+          }
+        });
       }
     });
 
@@ -785,6 +807,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _showLogoutDialog() {
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

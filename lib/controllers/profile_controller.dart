@@ -69,20 +69,22 @@ class ProfileController extends StateNotifier<ProfileState> {
           .read(authControllerProvider.notifier)
           .updateUserProfile(updatedUser);
 
-      // Small delay to ensure Firestore update is complete
-      await Future.delayed(const Duration(milliseconds: 300));
+      // Wait a bit longer for Firestore and state updates to complete
+      await Future.delayed(const Duration(milliseconds: 800));
 
-      // Check if the update was successful by checking auth state
+      // Get the latest auth state after update
       final authState = _ref.read(authControllerProvider);
-      if (authState.error == null && authState.user != null) {
+
+      if (authState.error == null) {
+        print('[PROFILE] Profile update successful');
+
+        // Update local state with the updated data
         state = state.copyWith(
-          user: authState.user,
+          user: updatedUser, // Use the updated user model directly
           isSaving: false,
           successMessage: 'Profile updated successfully!',
+          error: null,
         );
-
-        // Force refresh from server to ensure data consistency
-        await refreshProfile();
 
         return true;
       } else {
@@ -94,6 +96,7 @@ class ProfileController extends StateNotifier<ProfileState> {
         return false;
       }
     } catch (e) {
+      print('[PROFILE] Profile update exception: $e');
       state = state.copyWith(
         isSaving: false,
         error: 'An unexpected error occurred: $e',

@@ -329,13 +329,13 @@ class _AllergySelectionScreenState
       if (success) {
         _navigateToHome(context);
       } else {
-        print('❌ [ALLERGY_SCREEN] Failed to save allergens');
+        print('[ALLERGY_SCREEN] Failed to save allergens');
         final errorMessage =
             allergyState.error ?? 'Failed to save allergens. Please try again.';
         _showErrorSnackBar(context, errorMessage);
       }
     } catch (e) {
-      print('💥 [ALLERGY_SCREEN] Exception during save: $e');
+      print('[ALLERGY_SCREEN] Exception during save: $e');
       _showErrorSnackBar(
         context,
         'An unexpected error occurred. Please try again.',
