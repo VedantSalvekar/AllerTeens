@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../controllers/pen_reminder_controller.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/constants.dart';
 
 /// Dialog that appears when user taps on pen reminder notification
@@ -42,7 +41,7 @@ class PenReminderDialog extends ConsumerWidget {
 
             // Title
             const Text(
-              '💉 Pen Check!',
+              'Pen Check!',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
@@ -70,14 +69,27 @@ class PenReminderDialog extends ConsumerWidget {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        final success = await reminderController.saveResponse(
-                          false,
-                        );
-                        if (success && context.mounted) {
+                        print('No button pressed - closing dialog');
+
+                        // Close dialog immediately and prevent multiple closes
+                        if (context.mounted &&
+                            ModalRoute.of(context)?.isCurrent == true) {
                           Navigator.of(context).pop();
+                        }
+
+                        // Save response in background
+                        try {
+                          await reminderController.saveResponse(false);
+                          print('Response saved: No');
+                        } catch (e) {
+                          print('Error saving response: $e');
+                        }
+
+                        // Show confirmation
+                        if (context.mounted) {
                           _showConfirmationSnackBar(
                             context,
-                            'No worries! Remember to carry it tomorrow',
+                            'Response recorded. Remember your pen tomorrow!',
                             isSuccess: false,
                           );
                         }
@@ -108,11 +120,24 @@ class PenReminderDialog extends ConsumerWidget {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () async {
-                        final success = await reminderController.saveResponse(
-                          true,
-                        );
-                        if (success && context.mounted) {
+                        print('Yes button pressed - closing dialog');
+
+                        // Close dialog immediately and prevent multiple closes
+                        if (context.mounted &&
+                            ModalRoute.of(context)?.isCurrent == true) {
                           Navigator.of(context).pop();
+                        }
+
+                        // Save response in background
+                        try {
+                          await reminderController.saveResponse(true);
+                          print('Response saved: Yes');
+                        } catch (e) {
+                          print('Error saving response: $e');
+                        }
+
+                        // Show confirmation
+                        if (context.mounted) {
                           _showConfirmationSnackBar(
                             context,
                             'Great! You\'re all set for today',
@@ -173,7 +198,13 @@ class PenReminderDialog extends ConsumerWidget {
             // Close button (optional)
             const SizedBox(height: AppConstants.defaultPadding),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                print('🔔 Remind me later pressed - closing dialog');
+                if (context.mounted &&
+                    ModalRoute.of(context)?.isCurrent == true) {
+                  Navigator.of(context).pop();
+                }
+              },
               child: const Text(
                 'Remind me later',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
@@ -216,13 +247,35 @@ class PenReminderDialog extends ConsumerWidget {
   }
 }
 
+// Global flag to prevent multiple dialogs
+bool _isDialogShowing = false;
+
+/// Reset dialog flag (for development/testing)
+void resetDialogFlag() {
+  _isDialogShowing = false;
+  print('Dialog flag reset');
+}
+
 /// Function to show pen reminder dialog
 void showPenReminderDialog(BuildContext context) {
+  // Check if a dialog is already showing to prevent multiple dialogs
+  if (_isDialogShowing) {
+    print('Dialog already showing, skipping duplicate');
+    return;
+  }
+
+  print('Showing pen reminder dialog');
+  _isDialogShowing = true;
+
   showDialog(
     context: context,
     barrierDismissible: false, // Prevent dismissal by tapping outside
     builder: (context) => const PenReminderDialog(),
-  );
+  ).then((_) {
+    // Reset flag when dialog is dismissed
+    _isDialogShowing = false;
+    print('Dialog dismissed, flag reset');
+  });
 }
 
 /// Full-screen version for when app is opened from notification

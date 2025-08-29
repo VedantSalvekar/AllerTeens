@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
 
-/// App theme configuration with soft pastel colors for AllerWise
+/// App theme configuration with soft pastel colors for AllerTeens
 class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(

@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.allerwise.app.allerwise"
+    namespace = "com.allerteens.app.allerteens"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 
@@ -23,10 +23,10 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.allerwise.app.allerwise"
+        applicationId = "com.allerteens.app.allerteens"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -39,12 +39,7 @@ android {
             storeFile = file("debug.keystore")
             storePassword = "android"
         }
-        create("release") {
-            keyAlias = System.getenv("ANDROID_KEYSTORE_ALIAS")
-            keyPassword = System.getenv("ANDROID_KEYSTORE_PRIVATE_KEY_PASSWORD")
-            storeFile = file("keystore.jks")
-            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-        }
+        // Release signing configuration removed for demo builds
     }
 
     buildTypes {
@@ -54,7 +49,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            // Using debug signing for demo builds
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }

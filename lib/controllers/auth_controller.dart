@@ -81,47 +81,34 @@ class AuthController extends StateNotifier<AuthState> {
         (User? user) async {
           try {
             print(
-              '🔄 [AUTH_CONTROLLER] Auth state changed: ${user?.email ?? 'null'}',
+              '[AUTH_CONTROLLER] Auth state changed: ${user?.email ?? 'null'}',
             );
 
             if (user != null) {
-              print('🔄 [AUTH_CONTROLLER] User signed in, updating state...');
-              // Get user model from Firestore with retry logic
-              UserModel? userModel = await _authService.getCurrentUserModel();
+              print('[AUTH_CONTROLLER] User signed in, updating state...');
 
-              // Retry if user not found (might be a race condition)
-              if (userModel == null) {
-                print('⚠️ [AUTH_CONTROLLER] User model not found, retrying...');
-                await Future.delayed(const Duration(milliseconds: 1000));
-                userModel = await _authService.getCurrentUserModel();
-              }
+              // Create immediate basic model to prevent UI blocking
+              UserModel basicUserModel = UserModel.fromFirebaseUser(
+                uid: user.uid,
+                email: user.email!,
+                displayName: user.displayName,
+                photoUrl: user.photoURL,
+                isEmailVerified: user.emailVerified,
+              );
 
-              // If still null, create a basic user model from Firebase Auth
-              if (userModel == null) {
-                print(
-                  '⚠️ [AUTH_CONTROLLER] Creating basic user model from Firebase Auth...',
-                );
-                userModel = UserModel.fromFirebaseUser(
-                  uid: user.uid,
-                  email: user.email!,
-                  displayName: user.displayName,
-                  photoUrl: user.photoURL,
-                  isEmailVerified: user.emailVerified,
-                );
-              }
-
+              // Update state immediately for fast UI response
               state = state.copyWith(
-                user: userModel,
+                user: basicUserModel,
                 isLoading: false,
                 error: null,
                 isInitialized: true,
               );
-              print(
-                '✅ [AUTH_CONTROLLER] State updated for login: ${userModel.email}',
-              );
+              print('[AUTH_CONTROLLER] State updated with basic user info');
+
+              // Try to get enhanced user data from Firestore with retry logic
+              _loadUserDataWithRetry(user.uid, basicUserModel);
             } else {
-              print('🔄 [AUTH_CONTROLLER] User signed out, updating state...');
-              // ✅ FORCE: Create completely new state object to ensure Riverpod detects change
+              print('[AUTH_CONTROLLER] User signed out, updating state...');
               final newState = AuthState(
                 user: null,
                 isLoading: false,
@@ -130,11 +117,11 @@ class AuthController extends StateNotifier<AuthState> {
               );
               state = newState;
               print(
-                '✅ [AUTH_CONTROLLER] State updated for logout - new state: $newState',
+                '[AUTH_CONTROLLER] State updated for logout - new state: $newState',
               );
             }
           } catch (e) {
-            print('❌ [AUTH_CONTROLLER] Error in auth state listener: $e');
+            print('[AUTH_CONTROLLER] Error in auth state listener: $e');
             state = state.copyWith(
               isLoading: false,
               error: 'Authentication error: $e',
@@ -143,7 +130,7 @@ class AuthController extends StateNotifier<AuthState> {
           }
         },
         onError: (error) {
-          print('❌ [AUTH_CONTROLLER] Auth stream error: $error');
+          print('[AUTH_CONTROLLER] Auth stream error: $error');
           state = state.copyWith(
             isLoading: false,
             error: 'Authentication stream error: $error',
@@ -152,7 +139,7 @@ class AuthController extends StateNotifier<AuthState> {
         },
       );
     } catch (e) {
-      print('❌ [AUTH_CONTROLLER] Failed to initialize auth listener: $e');
+      print('[AUTH_CONTROLLER] Failed to initialize auth listener: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to initialize authentication: $e',
@@ -167,7 +154,7 @@ class AuthController extends StateNotifier<AuthState> {
     required String password,
     required String name,
   }) async {
-    print('🔵 [AUTH] Starting sign up process for email: $email, name: $name');
+    print('[AUTH] Starting sign up process for email: $email, name: $name');
 
     // Validate inputs
     if (email.isEmpty || password.isEmpty || name.isEmpty) {
@@ -181,7 +168,7 @@ class AuthController extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      print('🔵 [AUTH] Calling auth service sign up...');
+      print('[AUTH] Calling auth service sign up...');
       final result = await _authService.signUpWithEmailAndPassword(
         email: email,
         password: password,
@@ -190,7 +177,7 @@ class AuthController extends StateNotifier<AuthState> {
 
       if (result.isSuccess) {
         print(
-          '✅ [AUTH] Sign up successful for user: ${result.user?.name} (${result.user?.email})',
+          '[AUTH] Sign up successful for user: ${result.user?.name} (${result.user?.email})',
         );
         state = state.copyWith(
           user: result.user,
@@ -198,17 +185,24 @@ class AuthController extends StateNotifier<AuthState> {
           error: null,
         );
       } else {
-        print('❌ [AUTH] Sign up failed with error: ${result.error}');
+        print('[AUTH] Sign up failed with error: ${result.error}');
         state = state.copyWith(isLoading: false, error: result.error);
+
+        // Auto-clear error after 10 seconds to prevent continuous display
+        Future.delayed(Duration(seconds: 10), () {
+          if (state.error == result.error) {
+            state = state.copyWith(error: null);
+          }
+        });
       }
     } on Exception catch (e) {
-      print('💥 [AUTH] Sign up exception: $e');
+      print('[AUTH] Sign up exception: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Sign up failed: ${e.toString()}',
       );
     } catch (e) {
-      print('💥 [AUTH] Unexpected sign up error: $e');
+      print('[AUTH] Unexpected sign up error: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'An unexpected error occurred. Please try again.',
@@ -221,11 +215,11 @@ class AuthController extends StateNotifier<AuthState> {
     required String email,
     required String password,
   }) async {
-    print('🔵 [AUTH] Starting sign in process for email: $email');
+    print('[AUTH] Starting sign in process for email: $email');
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      print('🔵 [AUTH] Calling auth service sign in...');
+      print('[AUTH] Calling auth service sign in...');
       final result = await _authService.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -233,7 +227,7 @@ class AuthController extends StateNotifier<AuthState> {
 
       if (result.isSuccess) {
         print(
-          '✅ [AUTH] Sign in successful for user: ${result.user?.name} (${result.user?.email})',
+          '[AUTH] Sign in successful for user: ${result.user?.name} (${result.user?.email})',
         );
 
         // Update state immediately for loading state
@@ -242,11 +236,18 @@ class AuthController extends StateNotifier<AuthState> {
         // The Firebase auth state listener will handle setting the user
         // This ensures proper navigation triggering
       } else {
-        print('❌ [AUTH] Sign in failed with error: ${result.error}');
+        print('[AUTH] Sign in failed with error: ${result.error}');
         state = state.copyWith(isLoading: false, error: result.error);
+
+        // Auto-clear error after 10 seconds to prevent continuous display
+        Future.delayed(Duration(seconds: 10), () {
+          if (state.error == result.error) {
+            state = state.copyWith(error: null);
+          }
+        });
       }
     } catch (e) {
-      print('💥 [AUTH] Sign in exception: $e');
+      print('[AUTH] Sign in exception: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'An unexpected error occurred: $e',
@@ -256,16 +257,16 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// Sign in with Google
   Future<void> signInWithGoogle() async {
-    print('🔵 [AUTH] Starting Google Sign In process...');
+    print('[AUTH] Starting Google Sign In process...');
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      print('🔵 [AUTH] Calling auth service Google sign in...');
+      print('[AUTH] Calling auth service Google sign in...');
       final result = await _authService.signInWithGoogle();
 
       if (result.isSuccess) {
         print(
-          '✅ [AUTH] Google Sign In successful for user: ${result.user?.name} (${result.user?.email})',
+          '[AUTH] Google Sign In successful for user: ${result.user?.name} (${result.user?.email})',
         );
         state = state.copyWith(
           user: result.user,
@@ -275,15 +276,22 @@ class AuthController extends StateNotifier<AuthState> {
       } else {
         // Don't show error for user cancellation
         if (result.error?.contains('cancelled') == true) {
-          print('⚠️ [AUTH] Google Sign In was cancelled by user');
+          print('[AUTH] Google Sign In was cancelled by user');
           state = state.copyWith(isLoading: false, error: null);
         } else {
-          print('❌ [AUTH] Google Sign In failed with error: ${result.error}');
+          print('[AUTH] Google Sign In failed with error: ${result.error}');
           state = state.copyWith(isLoading: false, error: result.error);
+
+          // Auto-clear error after 10 seconds to prevent continuous display
+          Future.delayed(Duration(seconds: 10), () {
+            if (state.error == result.error) {
+              state = state.copyWith(error: null);
+            }
+          });
         }
       }
     } catch (e) {
-      print('💥 [AUTH] Google Sign In exception: $e');
+      print('[AUTH] Google Sign In exception: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'An unexpected error occurred: $e',
@@ -293,24 +301,22 @@ class AuthController extends StateNotifier<AuthState> {
 
   /// Sign out
   Future<void> signOut() async {
-    // ✅ PREVENT: Don't allow multiple simultaneous logout calls
+    // PREVENT: Don't allow multiple simultaneous logout calls
     if (state.isLoading) {
-      print('⚠️ [AUTH] Sign out already in progress, ignoring...');
       return;
     }
 
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      print('🔵 [AUTH] Calling auth service sign out...');
+      print('[AUTH] Calling auth service sign out...');
       await _authService.signOut();
 
-      // ✅ FORCE: Add small delay to ensure Firebase state propagates
       await Future.delayed(const Duration(milliseconds: 100));
 
-      print('✅ [AUTH] Sign out completed, waiting for auth state listener...');
+      print('[AUTH] Sign out completed, waiting for auth state listener...');
     } catch (e) {
-      print('❌ [AUTH] Sign out failed: $e');
+      print('[AUTH] Sign out failed: $e');
       state = state.copyWith(isLoading: false, error: 'Failed to sign out: $e');
     }
   }
@@ -363,11 +369,22 @@ class AuthController extends StateNotifier<AuthState> {
       final result = await _authService.updateUserProfile(userModel);
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          user: result.user,
+        print('[AUTH_CONTROLLER] Profile update successful, updating state');
+
+        // Force new state object to ensure UI updates
+        state = AuthState(
+          user: userModel, // Use the input userModel which has the latest data
           isLoading: false,
           error: null,
+          isInitialized: true,
         );
+
+        print(
+          '[AUTH_CONTROLLER] State updated with new profile data: ${userModel.allergies}',
+        );
+
+        // Force refresh from Firestore to ensure data consistency
+        await _refreshUserFromFirestore();
       } else {
         state = state.copyWith(isLoading: false, error: result.error);
       }
@@ -418,7 +435,7 @@ class AuthController extends StateNotifier<AuthState> {
       if (currentUser == null) return;
 
       print(
-        '🔓 [AUTH_CONTROLLER] Bypassing email verification for development...',
+        '[AUTH_CONTROLLER] Bypassing email verification for development...',
       );
 
       // Update user model with verified status
@@ -437,14 +454,84 @@ class AuthController extends StateNotifier<AuthState> {
         error: null,
       );
 
-      print('✅ [AUTH_CONTROLLER] Email verification bypassed successfully');
+      print('[AUTH_CONTROLLER] Email verification bypassed successfully');
     } catch (e) {
-      print('❌ [AUTH_CONTROLLER] Error bypassing email verification: $e');
+      print('[AUTH_CONTROLLER] Error bypassing email verification: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to bypass email verification: $e',
       );
     }
+  }
+
+  /// Refresh user data from Firestore to ensure consistency
+  Future<void> _refreshUserFromFirestore() async {
+    try {
+      print('[AUTH_CONTROLLER] Refreshing user data from Firestore...');
+      final userModel = await _authService.getCurrentUserModel();
+
+      if (userModel != null) {
+        // Force a new state object to trigger UI updates
+        state = AuthState(
+          user: userModel,
+          isLoading: false,
+          error: null,
+          isInitialized: true,
+        );
+        print(
+          '[AUTH_CONTROLLER] Successfully refreshed user data: ${userModel.allergies}',
+        );
+      }
+    } catch (e) {
+      print('[AUTH_CONTROLLER] Failed to refresh user data: $e');
+    }
+  }
+
+  /// Load user data with retry logic for Firestore failures
+  Future<void> _loadUserDataWithRetry(
+    String uid,
+    UserModel fallbackModel,
+  ) async {
+    int retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = Duration(milliseconds: 1500);
+
+    while (retryCount < maxRetries) {
+      try {
+        print(
+          '[AUTH_CONTROLLER] Attempting to load Firestore data (attempt ${retryCount + 1})',
+        );
+        final userModel = await _authService.getCurrentUserModel();
+
+        if (userModel != null) {
+          // Update state with complete Firestore data
+          state = state.copyWith(
+            user: userModel,
+            isLoading: false,
+            error: null,
+            isInitialized: true,
+          );
+          print(
+            '[AUTH_CONTROLLER] Successfully loaded complete user data from Firestore',
+          );
+          return;
+        }
+      } catch (e) {
+        print(
+          '[AUTH_CONTROLLER] Firestore load attempt ${retryCount + 1} failed: $e',
+        );
+        retryCount++;
+
+        if (retryCount < maxRetries) {
+          await Future.delayed(retryDelay);
+        }
+      }
+    }
+
+    print(
+      '[AUTH_CONTROLLER] All Firestore attempts failed, using fallback model',
+    );
+    // Keep the fallback model if all retries failed
   }
 
   /// Clear error state

@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hugeicons/hugeicons.dart';
 import '../../controllers/auth_controller.dart';
-import '../../models/user_model.dart';
-import '../../shared/widgets/custom_button.dart';
 import '../../core/constants.dart';
-import '../home/home_view.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
-import 'email_verification_screen.dart';
-import 'allergy_selection_screen.dart';
 
-/// Modern onboarding screen for AllerWise matching the exact design
+/// Modern onboarding screen for AllerTeens matching the exact design
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -26,7 +20,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     // Listen to auth state changes for error handling only
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
-      if (next.error != null) {
+      if (next.error != null && previous?.error != next.error) {
         _showErrorSnackBar(context, next.error!);
       }
     });
@@ -80,7 +74,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
                     // App name
                     Text(
-                      'AllerWise',
+                      'AllerTeens',
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
@@ -176,13 +170,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 ),
                               ),
                             )
-                          : Text(
-                              'Continue with Google',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.white,
-                              ),
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Image.asset(
+                                  'assets/icons/google_icon.png',
+                                  width: 30,
+                                  height: 30,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Continue with Google',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.white,
+                                  ),
+                                ),
+                              ],
                             ),
                     ),
                   ),

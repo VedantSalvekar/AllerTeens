@@ -25,9 +25,7 @@ class AssessmentEngine {
     required DateTime sessionStart,
     required DateTime sessionEnd,
   }) async {
-    debugPrint(
-      '🎯 [ASSESSMENT] Starting enhanced assessment for level: $level',
-    );
+    debugPrint('[ASSESSMENT] Starting enhanced assessment for level: $level');
 
     try {
       // Use the new scoring engine
@@ -69,8 +67,10 @@ class AssessmentEngine {
         isAdvancedLevel: assessmentResult.isAdvancedLevel,
         totalScore: assessmentResult.totalScore,
         overallGrade: assessmentResult.overallGrade,
-        strengths: feedbackResult.strengths, // Use FeedbackBuilder strengths (replaces ScoringEngine ones)
-        improvements: feedbackResult.improvements, // Use FeedbackBuilder improvements (replaces ScoringEngine ones) 
+        strengths: feedbackResult
+            .strengths, // Use FeedbackBuilder strengths (replaces ScoringEngine ones)
+        improvements: feedbackResult
+            .improvements, // Use FeedbackBuilder improvements (replaces ScoringEngine ones)
         detailedFeedback: feedbackResult.feedbackParagraph,
         assessedAt: assessmentResult.assessedAt,
         level: assessmentResult.level,
@@ -79,7 +79,7 @@ class AssessmentEngine {
         criticalFailure: assessmentResult.criticalFailure,
       );
     } catch (e) {
-      debugPrint('🚨 [ASSESSMENT] Enhanced assessment failed: $e');
+      debugPrint('[ASSESSMENT] Enhanced assessment failed: $e');
       // Fallback to legacy assessment
       final assessmentEngine = AssessmentEngine();
       return await assessmentEngine.assessTrainingSession(
@@ -1209,12 +1209,12 @@ Respond with JSON only:
 
     // Add debug logging to help track detection
     if (result) {
-      debugPrint('🔍 [ALLERGY DETECTION] POSITIVE: "$lowerInput"');
+      debugPrint('[ALLERGY DETECTION] POSITIVE: "$lowerInput"');
       debugPrint('  - hasAllergyDisclosure: $hasAllergyDisclosure');
       debugPrint('  - isOrdering: $isOrdering');
       debugPrint('  - isOnlyGeneralResponse: $isOnlyGeneralResponse');
     } else {
-      debugPrint('🔍 [ALLERGY DETECTION] NEGATIVE: "$lowerInput"');
+      debugPrint('[ALLERGY DETECTION] NEGATIVE: "$lowerInput"');
       debugPrint('  - hasAllergyDisclosure: $hasAllergyDisclosure');
       debugPrint('  - isOrdering: $isOrdering');
       debugPrint('  - isOnlyGeneralResponse: $isOnlyGeneralResponse');
@@ -1282,7 +1282,7 @@ Respond with JSON only:
         case 'safe_food_order':
           if (conversationContext.selectedDish != null) {
             debugPrint(
-              '🍽️ [SCORING] Checking safe food for dish: "${conversationContext.selectedDish}"',
+              '[SCORING] Checking safe food for dish: "${conversationContext.selectedDish}"',
             );
             // Load menu for advanced safety checking
             await MenuService.instance.loadMenu();
@@ -1290,7 +1290,7 @@ Respond with JSON only:
               conversationContext.selectedDish!,
             );
             debugPrint(
-              '🍽️ [SCORING] Found menu item: ${menuItem?.name ?? "NOT FOUND"}',
+              '[SCORING] Found menu item: ${menuItem?.name ?? "NOT FOUND"}',
             );
             if (menuItem != null) {
               final isSafe = MenuService.instance.isItemSafeForUser(
@@ -1298,28 +1298,28 @@ Respond with JSON only:
                 playerProfile.allergies,
               );
               debugPrint(
-                '🍽️ [SCORING] Is safe for allergies ${playerProfile.allergies}: $isSafe',
+                '[SCORING] Is safe for allergies ${playerProfile.allergies}: $isSafe',
               );
               if (isSafe) {
                 earnedPoints = maxPoints;
                 strengths.add('Selected safe food option');
                 debugPrint(
-                  '🍽️ [SCORING] ✅ Awarded $maxPoints points for safe food selection',
+                  '[SCORING] Awarded $maxPoints points for safe food selection',
                 );
               } else {
                 improvements.add(
                   'Ordered unsafe food - always check ingredients',
                 );
-                debugPrint('🍽️ [SCORING] ❌ No points - unsafe food selected');
+                debugPrint('[SCORING] No points - unsafe food selected');
               }
             } else {
               debugPrint(
-                '🍽️ [SCORING] ❌ Could not find menu item for "${conversationContext.selectedDish}" - no points awarded',
+                '[SCORING] Could not find menu item for "${conversationContext.selectedDish}" - no points awarded',
               );
             }
           } else {
             debugPrint(
-              '🍽️ [SCORING] ❌ No dish selected - no safe food points awarded',
+              '[SCORING] No dish selected - no safe food points awarded',
             );
           }
           break;
@@ -1550,7 +1550,6 @@ Respond with JSON only:
       }
     }
 
-    // ✅ CRITICAL: Advanced level failure conditions
     String? failureReason;
 
     if (scenarioConfig.level == DifficultyLevel.advanced) {

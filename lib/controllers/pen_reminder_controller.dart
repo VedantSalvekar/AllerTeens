@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/pen_reminder_response.dart';
@@ -126,25 +127,43 @@ class PenReminderController extends StateNotifier<PenReminderState> {
         .collection('pen_reminder_responses');
   }
 
+  static bool _demoInitialized = false;
+
+  /// Reset demo initialization flag (for development/testing)
+  static void resetDemoFlag() {
+    _demoInitialized = false;
+  }
+
   /// Initialize pen reminders (call on app start when user is signed in)
-  Future<void> initialize() async {
+  Future<void> initialize({GlobalKey<NavigatorState>? navigatorKey}) async {
     if (_userId == null) return;
 
-    // Initialize notification service
-    await PenReminderNotificationService.instance.initialize();
+    // Only process if we have a navigator key (ignore duplicate calls without key)
+    if (navigatorKey == null) {
+      return;
+    }
 
-    // Load existing responses
-    await loadResponses();
+    // Initialize notification service with navigator key (only on first call)
+    if (!_demoInitialized) {
+      _demoInitialized = true;
+      await PenReminderNotificationService.instance.initialize(
+        navigatorKey: navigatorKey,
+      );
 
-    // Check today's response
-    await _checkTodayResponse();
+      // Load existing responses
+      await loadResponses();
 
-    // Schedule daily reminder if not already done
-    // TODO: Uncomment this for production use
-    // await PenReminderNotificationService.instance.scheduleDailyReminder();
+      // Check today's response
+      await _checkTodayResponse();
 
-    // For testing: Show notification immediately
-    await showTestNotification();
+      // Show notification immediately for demo
+      await Future.delayed(
+        const Duration(seconds: 2),
+      ); // Small delay to let app fully load
+      await showTestNotification();
+    } else {
+      print('[DEMO] Already initialized, skipping');
+    }
   }
 
   /// Show test notification (for development/testing)
@@ -312,10 +331,27 @@ class PenReminderController extends StateNotifier<PenReminderState> {
     state = state.copyWith(error: null);
   }
 
-  /// Enable/disable daily reminders
-  Future<void> setDailyRemindersEnabled(bool enabled) async {
+  /// Enable/disable daily reminders with random time
+  Future<void> setDailyRemindersEnabledRandom(bool enabled) async {
     if (enabled) {
-      await PenReminderNotificationService.instance.scheduleDailyReminder();
+      await PenReminderNotificationService.instance
+          .scheduleDailyReminderRandom();
+    } else {
+      await PenReminderNotificationService.instance.cancelDailyReminder();
+    }
+  }
+
+  /// Enable/disable daily reminders with fixed time (for testing)
+  Future<void> setDailyRemindersEnabledFixed(
+    bool enabled, {
+    int hour = 11,
+    int minute = 41,
+  }) async {
+    if (enabled) {
+      await PenReminderNotificationService.instance.scheduleDailyReminderFixed(
+        hour: hour,
+        minute: minute,
+      );
     } else {
       await PenReminderNotificationService.instance.cancelDailyReminder();
     }

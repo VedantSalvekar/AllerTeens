@@ -8,6 +8,7 @@ import '../../data/scenario_data.dart';
 import '../../services/progress_tracking_service.dart';
 import '../../services/menu_service.dart';
 import '../integrated_conversation/integrated_conversation_screen.dart';
+import '../multi_character_conversation/multi_character_conversation_screen.dart';
 import '../symptom_tracking/symptom_form_screen.dart';
 import '../symptom_tracking/logs_screen.dart';
 import '../pen_reminder/pen_reminder_dialog.dart';
@@ -15,6 +16,7 @@ import '../auth/onboarding_screen.dart';
 import '../learn/learn_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../services/emergency_service.dart';
+import '../../shared/widgets/barcode_scan_card.dart';
 
 /// Home screen with custom navigation and greeting
 class HomeView extends ConsumerStatefulWidget {
@@ -71,6 +73,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
     return Scaffold(
       backgroundColor: AppColors.white,
       body: _buildCurrentPage(firstName),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _makeEmergencyCall(context),
+        backgroundColor: const Color.fromARGB(255, 11, 193, 65),
+        child: const Icon(Icons.phone, color: Colors.white, size: 24),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       // Bottom Navigation Bar
       bottomNavigationBar: Container(
         height: 90,
@@ -147,51 +155,24 @@ class _HomeViewState extends ConsumerState<HomeView> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // Emergency call button
-                  GestureDetector(
-                    onTap: () => _makeEmergencyCall(context),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color.fromARGB(255, 11, 193, 65),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.error.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.phone,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
                   // Notification icon
-                  GestureDetector(
-                    onTap: () => _showPenReminderDialog(context),
-                    child: Container(
-                      width: 28,
-                      height: 28,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.transparent,
-                      ),
-                      child: Image.asset(
-                        'assets/icons/notification-02.png',
-                        width: 16,
-                        height: 16,
-                        color: AppColors.white,
-                      ),
-                    ),
-                  ),
-
+                  // GestureDetector(
+                  //   onTap: () => _showPenReminderDialog(context),
+                  //   child: Container(
+                  //     width: 28,
+                  //     height: 28,
+                  //     decoration: const BoxDecoration(
+                  //       shape: BoxShape.circle,
+                  //       color: Colors.transparent,
+                  //     ),
+                  //     child: Image.asset(
+                  //       'assets/icons/notification-02.png',
+                  //       width: 16,
+                  //       height: 16,
+                  //       color: AppColors.white,
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(width: 12),
                   // Profile icon
                   GestureDetector(
@@ -390,6 +371,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
                         ),
                       ),
                     ),
+
+                    // Barcode Scan Card
+                    const BarcodeScanCard(),
 
                     // Rest of the screen content can go here
                     const Expanded(child: SizedBox()),
@@ -718,21 +702,21 @@ class _HomeViewState extends ConsumerState<HomeView> {
               },
             ),
             // Settings option
-            ListTile(
-              leading: const Icon(Icons.settings, color: AppColors.primary),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pop(context);
-                // Navigate to settings screen
-              },
-            ),
+            // ListTile(
+            //   leading: const Icon(Icons.settings, color: AppColors.primary),
+            //   title: const Text('Settings'),
+            //   onTap: () {
+            //     Navigator.pop(context);
+            //     // Navigate to settings screen
+            //   },
+            // ),
             // Logout option
             Consumer(
               builder: (context, ref, child) {
                 final authState = ref.watch(authControllerProvider);
                 return ListTile(
                   leading: const Icon(Icons.logout, color: AppColors.error),
-                  title: const Text('Logout'),
+                  title: const Text('Log Out'),
                   enabled: !authState.isLoading, // Disable during logout
                   onTap: authState.isLoading
                       ? null
@@ -769,6 +753,20 @@ class _HomeViewState extends ConsumerState<HomeView> {
 }
 
 // Create a content-only version of the scenario selection screen
+class _GroupScenario {
+  final String id;
+  final String title;
+  final String description;
+  final List<String> participants;
+
+  const _GroupScenario({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.participants,
+  });
+}
+
 class ScenarioSelectionContent extends ConsumerStatefulWidget {
   const ScenarioSelectionContent({super.key});
 
@@ -911,7 +909,7 @@ class _ScenarioSelectionContentState
           vertical: 4,
         ), // Reduced padding
         tabs: const [
-          Tab(child: Text('All', style: TextStyle(fontSize: 12))),
+          Tab(child: Text('Groups', style: TextStyle(fontSize: 12))),
           Tab(child: Text('Beginner', style: TextStyle(fontSize: 12))),
           Tab(child: Text('Intermediate', style: TextStyle(fontSize: 12))),
           Tab(child: Text('Advanced', style: TextStyle(fontSize: 12))),
@@ -932,7 +930,7 @@ class _ScenarioSelectionContentState
     return TabBarView(
       controller: _tabController,
       children: [
-        _buildScenarioList(ScenarioDataProvider.getAllScenarios(), userScore),
+        _buildGroupSituationsView(), // Groups tab shows group scenarios
         _buildScenarioList(
           ScenarioDataProvider.getScenariosByDifficulty(
             DifficultyLevel.beginner,
@@ -955,6 +953,174 @@ class _ScenarioSelectionContentState
     );
   }
 
+  Widget _buildGroupSituationsView() {
+    final groupScenarios = [
+      _GroupScenario(
+        id: 'party_intermediate',
+        title: 'Birthday Party Challenge',
+        description:
+            'Navigate peer pressure when friends offer unsafe food at a party',
+        participants: ['Emma', 'Jake', 'Maya'],
+      ),
+      _GroupScenario(
+        id: 'dinner_with_friends',
+        title: 'Dinner with Friends',
+        description:
+            'Handle group ordering situation when friends want to share unsafe food',
+        participants: ['Sam', 'Riley', 'Alex'],
+      ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      child: ListView.builder(
+        itemCount: groupScenarios.length,
+        itemBuilder: (context, index) {
+          final scenario = groupScenarios[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _buildGroupScenarioCard(scenario),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildGroupScenarioCard(_GroupScenario scenario) {
+    // Determine the image path based on scenario ID
+    String imagePath;
+    if (scenario.id == 'party_intermediate') {
+      imagePath = 'assets/images/backgrounds/birthday_group.png';
+    } else if (scenario.id == 'dinner_with_friends') {
+      imagePath = 'assets/images/backgrounds/dinner_with_friends.png';
+    } else {
+      // Fallback to default image
+      imagePath = 'assets/images/backgrounds/restaurant_dining_card_image.jpeg';
+    }
+
+    return GestureDetector(
+      onTap: () => _startGroupScenario(scenario),
+      child: Container(
+        height: 240, // Same height as other scenario cards
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 15,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top image section
+            Container(
+              height: 120, // Same image height as other cards
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+                image: DecorationImage(
+                  image: AssetImage(imagePath),
+                  fit: BoxFit.cover,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  // Overlay for better text visibility
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.1),
+                          Colors.black.withOpacity(0.3),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Bottom content section
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title
+                    Text(
+                      scenario.title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    // Description
+                    Expanded(
+                      child: Text(
+                        scenario.description,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                          height: 1.3,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // AI Friends display
+                    Text(
+                      'AI Friends: ${scenario.participants.join(', ')}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _startGroupScenario(_GroupScenario scenario) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MultiCharacterConversationScreen(
+          dialogueFile: '${scenario.id}_dialogue.json',
+          scenarioTitle: scenario.title,
+          scenarioType: scenario.id,
+        ),
+      ),
+    ).then((_) {
+      refreshProgressData();
+    });
+  }
+
   Widget _buildScenarioList(List<TrainingScenario> scenarios, int userScore) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
@@ -965,6 +1131,7 @@ class _ScenarioSelectionContentState
           final isUnlocked =
               scenario.id == 'restaurant_beginner' ||
               scenario.id == 'restaurant_advanced' ||
+              scenario.id == 'party_intermediate' ||
               userScore >= scenario.requiredScore;
           return Padding(
             padding: const EdgeInsets.only(bottom: 16), // Spacing between cards
@@ -1510,16 +1677,7 @@ class _ScenarioSelectionContentState
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context); // Close menu dialog
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        IntegratedConversationScreen(scenarioId: scenario.id),
-                  ),
-                ).then((_) {
-                  // Refresh progress data when returning from training
-                  refreshProgressData();
-                });
+                _startScenario(scenario);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: scenario.accentColor,
@@ -1533,15 +1691,7 @@ class _ScenarioSelectionContentState
     } catch (e) {
       // Fallback if menu loading fails
       if (context.mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                IntegratedConversationScreen(scenarioId: scenario.id),
-          ),
-        ).then((_) {
-          refreshProgressData();
-        });
+        _startScenario(scenario);
       }
     }
   }
@@ -1629,6 +1779,38 @@ class _ScenarioSelectionContentState
         );
       }).toList(),
     );
+  }
+
+  void _startScenario(TrainingScenario scenario) {
+    // Check if this is a multi-character conversation
+    final conversationType = scenario.scenarioData['conversationType'];
+    if (conversationType == 'multi_character') {
+      final dialogueFile =
+          scenario.scenarioData['dialogueFile'] ??
+          'birthday_party_dialogue.json';
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MultiCharacterConversationScreen(
+            dialogueFile: dialogueFile,
+            scenarioTitle: scenario.title,
+          ),
+        ),
+      ).then((_) {
+        refreshProgressData();
+      });
+    } else {
+      // Default to regular integrated conversation
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              IntegratedConversationScreen(scenarioId: scenario.id),
+        ),
+      ).then((_) {
+        refreshProgressData();
+      });
+    }
   }
 
   Widget _buildScenarioDetailsDialog(TrainingScenario scenario) {
@@ -1751,9 +1933,13 @@ class _ScenarioSelectionContentState
                         child: SizedBox(
                           height: 40,
                           child: ElevatedButton(
-                            onPressed: () async {
+                            onPressed: () {
                               Navigator.pop(context); // Close scenario dialog
-                              await _showMenuDialog(context, scenario);
+                              if (scenario.type == ScenarioType.restaurant) {
+                                _showMenuDialog(context, scenario);
+                              } else {
+                                _startScenario(scenario);
+                              }
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: scenario.accentColor,

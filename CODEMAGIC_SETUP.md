@@ -1,4 +1,4 @@
-# Codemagic Setup Guide for AllerWise
+# Codemagic Setup Guide for allerteens
 
 This guide will help you set up Codemagic CI/CD for building your Flutter app for both Android and iOS platforms.
 
@@ -94,8 +94,8 @@ In your `codemagic.yaml`, replace `YOUR_EMAIL@example.com` with your actual emai
 
 Ensure your bundle identifiers match:
 
-- Android: `com.allerwise.app.allerwise` (in `android/app/build.gradle.kts`)
-- iOS: `com.allerwise.app.allerwise` (in iOS project settings)
+- Android: `com.allerteens.app.allerteens` (in `android/app/build.gradle.kts`)
+- iOS: `com.allerteens.app.allerteens` (in iOS project settings)
 
 ## 5. Test Your Setup
 

@@ -16,13 +16,11 @@ class EmergencyService {
         // Launch the phone call
         return await launchUrl(phoneUrl);
       } else {
-        print(
-          '❌ [EMERGENCY_SERVICE] Cannot launch phone call to: $phoneNumber',
-        );
+        print('[EMERGENCY_SERVICE] Cannot launch phone call to: $phoneNumber');
         return false;
       }
     } catch (e) {
-      print('💥 [EMERGENCY_SERVICE] Error making phone call: $e');
+      print('[EMERGENCY_SERVICE] Error making phone call: $e');
       return false;
     }
   }
@@ -46,11 +44,11 @@ class EmergencyService {
         // Launch the SMS
         return await launchUrl(smsUrl);
       } else {
-        print('❌ [EMERGENCY_SERVICE] Cannot launch SMS to: $phoneNumber');
+        print('[EMERGENCY_SERVICE] Cannot launch SMS to: $phoneNumber');
         return false;
       }
     } catch (e) {
-      print('💥 [EMERGENCY_SERVICE] Error sending SMS: $e');
+      print('[EMERGENCY_SERVICE] Error sending SMS: $e');
       return false;
     }
   }

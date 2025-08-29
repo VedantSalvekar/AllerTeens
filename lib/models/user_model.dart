@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// User data model for AllerWise medical research app
+/// User data model for AllerTeens medical research app
 class UserModel {
   final String id;
   final String name;

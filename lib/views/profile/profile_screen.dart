@@ -99,6 +99,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _initializeUserData();
         });
       }
+
+      // Also listen for allergen updates specifically
+      if (previous?.user?.allergies != next.user?.allergies &&
+          next.user != null) {
+        print('[PROFILE_SCREEN] Allergen data updated, refreshing UI');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              // Force UI rebuild with new allergen data
+            });
+          }
+        });
+      }
     });
 
     // Listen for state changes and show messages
@@ -109,6 +122,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (next.successMessage != null &&
           previous?.successMessage != next.successMessage) {
         _showSnackBar(next.successMessage!, isError: false);
+
+        // Force UI refresh after successful update
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              // Trigger UI rebuild with updated data
+            });
+          }
+        });
       }
     });
 
@@ -539,13 +561,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Center(
       child: TextButton(
         onPressed: _showLogoutDialog,
-        child: Text(
-          'Log Out',
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.textSecondary,
-            decoration: TextDecoration.underline,
-          ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.logout, color: AppColors.error),
+            const SizedBox(width: 12),
+            Text(
+              'Log Out',
+              style: TextStyle(fontSize: 14, color: AppColors.error),
+            ),
+          ],
         ),
       ),
     );
@@ -567,9 +593,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           emergencyContact?['relationship']?.toString() ??
           ''),
     );
-    final phoneController = TextEditingController(
-      text: emergencyContact?['phone']?.toString() ?? '',
-    );
+    final existingPhoneRaw = emergencyContact?['phone']?.toString() ?? '';
+    String initialPhone;
+    if (existingPhoneRaw.trim().isEmpty) {
+      initialPhone = '+353 ';
+    } else {
+      final existingTrimmed = existingPhoneRaw.trim();
+      if (existingTrimmed.startsWith('+')) {
+        initialPhone = existingTrimmed;
+      } else {
+        final digitsOnly = existingTrimmed.replaceAll(RegExp(r'[^\d]'), '');
+        if (digitsOnly.startsWith('353')) {
+          initialPhone = '+$digitsOnly';
+        } else if (digitsOnly.startsWith('0')) {
+          initialPhone = '+353${digitsOnly.substring(1)}';
+        } else {
+          initialPhone = '+353$digitsOnly';
+        }
+      }
+    }
+    final phoneController = TextEditingController(text: initialPhone);
 
     showDialog(
       context: context,
@@ -612,12 +655,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           ElevatedButton(
             onPressed: () {
+              // Normalize phone to ensure +353 prefix
+              String normalized = phoneController.text.trim();
+              if (!normalized.startsWith('+')) {
+                final digitsOnly = normalized.replaceAll(RegExp(r'[^\d]'), '');
+                if (digitsOnly.startsWith('353')) {
+                  normalized = '+$digitsOnly';
+                } else if (digitsOnly.startsWith('0')) {
+                  normalized = '+353${digitsOnly.substring(1)}';
+                } else {
+                  normalized = '+353$digitsOnly';
+                }
+              }
+
               ref
                   .read(profileControllerProvider.notifier)
                   .updateEmergencyContact(
                     name: nameController.text.trim(),
                     relation: relationController.text.trim(),
-                    phone: phoneController.text.trim(),
+                    phone: normalized,
                   );
               Navigator.pop(context);
             },
@@ -635,20 +691,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // Allergy selection dialog
   void _showAllergySelectionDialog() {
     final commonAllergies = [
+      'Peanuts',
       'Tree nuts',
-      'Sulphur dioxide',
+      'Milk',
+      'Eggs',
+      'Soya',
+      'Wheat',
       'Sesame',
-      'Peanut',
+      'Celery',
       'Mustard',
+      'Fish',
+      'Crustaceans',
       'Molluscs',
       'Lupin',
-      'Milk',
-      'Fish',
-      'Gluten',
-      'Egg',
-      'Crustaceans',
-      'Celery',
-      'Soybean',
+      'Sulphites',
     ];
 
     final currentUser = ref.read(profileControllerProvider).user;
@@ -751,6 +807,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _showLogoutDialog() {
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

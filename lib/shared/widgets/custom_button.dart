@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Custom button widget for AllerWise authentication screens
+/// Custom button widget for AllerTeens authentication screens
 class CustomButton extends StatelessWidget {
   final String text;
   final VoidCallback? onPressed;

@@ -175,6 +175,9 @@ class OpenAIDialogueService {
   Function()? onTTSStarted;
   Function()? onTTSCompleted;
 
+  // Getter to check if TTS is currently playing
+  bool get isPlaying => _realisticTts.isPlaying;
+
   OpenAIDialogueService() {
     // Initialize services asynchronously to prevent crashes
     initializeServices();
@@ -2885,5 +2888,29 @@ Respond with JSON only:
               : word[0].toUpperCase() + word.substring(1).toLowerCase(),
         )
         .join(' ');
+  }
+
+  /// Simple AI response for multi-character conversations
+  Future<String> getSimpleAIResponse(
+    String userInput, {
+    required String systemPrompt,
+  }) async {
+    try {
+      final messages = [
+        {'role': 'system', 'content': systemPrompt},
+        {'role': 'user', 'content': userInput},
+      ];
+
+      final response = await _sendOpenAIRequest(messages);
+      return response.trim();
+    } catch (e) {
+      debugPrint('Error in getSimpleAIResponse: $e');
+      rethrow;
+    }
+  }
+
+  /// Speak text using the TTS service
+  Future<void> speakWithNaturalVoice(String text, {String? voice}) async {
+    await _realisticTts.speakWithNaturalVoice(text, voice: voice);
   }
 }

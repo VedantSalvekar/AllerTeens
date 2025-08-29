@@ -22,7 +22,7 @@
 -keep class android.speech.** { *; }
 
 # Keep all model classes
--keep class com.allerwise.app.allerwise.** { *; }
+-keep class com.allerteens.app.allerteens.** { *; }
 
 # General Android optimizations
 -keepattributes *Annotation*
