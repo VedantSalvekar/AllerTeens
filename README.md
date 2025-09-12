@@ -48,7 +48,3 @@ A mobile app built with Flutter that helps teenagers learn how to safely navigat
 ## How it works
 
 This is a complete allergy management toolkit for teenagers. The main feature is AI-powered simulations where you practice discussing allergies with a virtual ai character. Beyond training, you can scan products for allergens, track symptoms, set medication reminders, and access educational resources to build real-world confidence and safety skills.
-
-## License
-
-MIT License - see LICENSE file for details.
