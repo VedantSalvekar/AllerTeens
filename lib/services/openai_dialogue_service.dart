@@ -643,7 +643,7 @@ You are a restaurant waiter serving a customer. Be natural and conversational.
 CUSTOMER STATUS: ${hasDisclosedAllergies ? 'Mentioned allergies: $previousAllergies' : 'No allergies mentioned yet'}
 ${selectedDish != null ? 'Current order: $selectedDish' : 'No order placed yet'}
 
-🍽️ YOUR MENU (ONLY mention these exact dishes):
+YOUR MENU (ONLY mention these exact dishes):
 $menuForAI
 
 BE A NATURAL WAITER:
